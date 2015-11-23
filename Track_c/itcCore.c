@@ -1,5 +1,9 @@
 #include "itcCore.h"
-
+#include <stdio.h>
+#include <assert.h>
+#include <math.h>
+#include <stdlib.h>
+#include <string.h>
 
 Itc_Mat_t itc_mat( int rows, int cols, int type, void* data)
 {
@@ -20,13 +24,20 @@ Itc_Mat_t itc_mat( int rows, int cols, int type, void* data)
 Itc_Mat_t*	itc_create_mat( int height, int width, int type )
 {
 	Itc_Mat_t* arr = itc_create_matHeader( height, width, type );
+	if (arr == NULL)
+	{
+		itc_release_mat(&arr);
+		return NULL;
+	}
 	size_t step, total_size;
 	Itc_Mat_t* mat = (Itc_Mat_t*)arr;
 	int64 _total_size;
 	step = mat->step;
 	
 	if( mat->rows == 0 || mat->cols == 0 )
+	{	
 		return arr;
+	}
 
 	if( mat->data.ptr != 0 )
 		free( mat->data.ptr);//"Data is already allocated"
@@ -36,9 +47,19 @@ Itc_Mat_t*	itc_create_mat( int height, int width, int type )
 
 	_total_size = (int64)step*mat->rows + sizeof(int)+ITC_MALLOC_ALIGN;	//int是用于保存统计计数的，ITC_MALLOC_ALIGN用与内存的对齐
 	total_size = (size_t)_total_size;				//根据系统不同，用size_t类型截取本系统能分配的空间大小
- 	if(_total_size != (int64)total_size)			//如果不相等，说明已经溢出
- 		ITC_ERROR_("Too big buffer is allocated");	//分配的空间超出当前系统的寻址范围
-	mat->refcount = (int*)malloc( (size_t)total_size );
+	if (_total_size != (int64)total_size)			//如果不相等，说明已经溢出
+	{
+		ITC_ERROR_("Too big buffer is allocated");	//分配的空间超出当前系统的寻址范围}
+		itc_release_mat(&arr);
+		return arr;
+	}
+
+	mat->refcount = (int*)itcAlloc((size_t)total_size);
+	if (mat->refcount == NULL)
+	{
+		itc_release_mat(&arr);
+		return NULL;
+	}
 	memset(mat->refcount, 0, (size_t)total_size);	//初始化为0
 	mat->data.ptr = (uchar*)( mat->refcount + 1);
 	mat->data.ptr = (uchar*)(((size_t)mat->data.ptr + ITC_MALLOC_ALIGN - 1) &~ (size_t)(ITC_MALLOC_ALIGN - 1));//对齐到ITC_MALLOC_ALIGN整数位，比如说地址是110，ITC_MALLOC_ALIGN=16，那么就把地址对齐到112，如果地址是120，那么就对齐到128，
@@ -66,7 +87,11 @@ Itc_Mat_t*	itc_create_matHeader( int rows, int cols, int type )
 	if( min_step <= 0 )
 		ITC_ERROR_("Invalid matrix type");						//
 
-	Itc_Mat_t* pMat = (Itc_Mat_t*)malloc(sizeof(*pMat));
+	Itc_Mat_t* pMat = (Itc_Mat_t*)itcAlloc(sizeof(*pMat));
+	if (pMat == NULL)
+	{
+		return NULL;
+	}
 	memset(pMat, 0, sizeof(*pMat));								//
 
 	pMat->step = min_step;
@@ -124,12 +149,15 @@ Itc_Mat_t*	itc_init_matHeader( Itc_Mat_t* arr, int rows, int cols, int type, voi
 void itc_release_mat(Itc_Mat_t** arr)
 {
 	Itc_Mat_t *mat=*arr;
-	mat->data.ptr = NULL;
-	if( mat->refcount != NULL && --*mat->refcount == 0 )//引用计数为0时才释放数据内存
-		free( mat->refcount );
-	mat->refcount = NULL;
-	free(mat);
-	mat = NULL;
+	if (mat!=NULL)
+	{
+		mat->data.ptr = NULL;
+		if (mat->refcount != NULL && --*mat->refcount == 0)//引用计数为0时才释放数据内存
+			itcFree_(mat->refcount);
+		mat->refcount = NULL;
+		itcFree_(mat);
+		mat = NULL;
+	}
 }
 
 
@@ -170,7 +198,7 @@ void itc_release_mat(Itc_Mat_t** arr)
 	ICV_DEF_BIN_ARI_OP_2D(__op__, icv##name##_64f_C1R, double, double, ITC_CAST_64F)
 
 #undef ITC_SUB_R
-#define ITC_SUB_R(a,b) ((a) - (b))							//定义sub操作
+#define ITC_SUB_R(a,b) ((a) - (b))						//定义sub操作
 ICV_DEF_BIN_ARI_ALL(ITC_SUB_R, Sub)						//定义sub操作的函数
 
 void itc_sub_mat(Itc_Mat_t* src1, Itc_Mat_t* src2, Itc_Mat_t* dst)
@@ -217,6 +245,7 @@ void itc_sub_mat(Itc_Mat_t* src1, Itc_Mat_t* src2, Itc_Mat_t* dst)
 	}
 }
 
+#define MHT_TRACH_RESERVE_THRESHOLD 227  //只保留大于该值的点，否则置为0
 void track_update_MHI(Itc_Mat_t* src1, Itc_Mat_t* src2, Itc_Mat_t* mhi, int diffThreshold, Itc_Mat_t* maskT, int Threshold)
 {
 	if (!ITC_ARE_TYPES_EQ(src1, src2) || !ITC_ARE_TYPES_EQ(src1, mhi))//检测类型是否一致
@@ -247,7 +276,7 @@ void track_update_MHI(Itc_Mat_t* src1, Itc_Mat_t* src2, Itc_Mat_t* mhi, int diff
 		{
 			for (j = 0; j < sizeMat.width; j++)
 			{
-				int k = abs(qsrc1[j] - qsrc2[j]);
+				int k = abs((int)(qsrc1[j] - qsrc2[j]));
 				if ( k > diffThreshold )
 				{
 					qmhi[j] = 255;
@@ -255,7 +284,7 @@ void track_update_MHI(Itc_Mat_t* src1, Itc_Mat_t* src2, Itc_Mat_t* mhi, int diff
 				else
 				{
 					//mhi不能取小于0的值
-					qmhi[j] = qmhi[j] > 228 ? qmhi[j] : 1;
+					qmhi[j] = qmhi[j] > MHT_TRACH_RESERVE_THRESHOLD ? qmhi[j] : 1;
 					//qmhi[j] = ITC_IMAX(qmhi[j], 1);
 					qmhi[j]--;
 				}
@@ -277,11 +306,14 @@ void track_update_MHI(Itc_Mat_t* src1, Itc_Mat_t* src2, Itc_Mat_t* mhi, int diff
 			ITC_ERROR_("矩阵类型不一致");
 		if (!ITC_ARE_SIZES_EQ(src1, maskT))//检查大小是否一致
 			ITC_ERROR_("矩阵大小不一致");
-		for (i = 1; i < sizeMat.height - 1; i++)
+		//边缘不处理
+		sizeMat.height--;
+		sizeMat.width--;
+		for (i = 1; i < sizeMat.height; i++)
 		{
-			for (j = 1; j < sizeMat.width - 1; j++)
+			for (j = 1; j < sizeMat.width; j++)
 			{
-				int k = abs(qsrc1[j] - qsrc2[j]);
+				int k = abs((int)(qsrc1[j] - qsrc2[j]));
 				if (k > diffThreshold)
 				{
 					qmask[j] = 1;//生成一个二值化掩码
@@ -290,8 +322,8 @@ void track_update_MHI(Itc_Mat_t* src1, Itc_Mat_t* src2, Itc_Mat_t* mhi, int diff
 				else
 				{
 					//mhi不能取小于0的值
-					qmask[j] = qmhi[j] > Threshold;//生成一个二值化掩码
-					qmhi[j] = qmhi[j] > 228 ? qmhi[j] : 1;
+					qmask[j] = (qmhi[j] > Threshold) & 1;//生成一个二值化掩码
+					qmhi[j] = qmhi[j] > MHT_TRACH_RESERVE_THRESHOLD ? qmhi[j] : 1;
 					//qmhi[j] = ITC_IMAX(qmhi[j], 1);
 					qmhi[j]--;
 				}
@@ -420,6 +452,10 @@ int							nbd)
 
 int track_find_contours(Itc_Mat_t* src, Track_Contour_t** pContour, Track_MemStorage_t*  storage)
 {
+	if (src == NULL || pContour == NULL || storage == NULL)
+	{
+		return 0;
+	}
 	int step = src->step;
 	//char *img0 = (char*)(src->data.ptr);
 	char *img = (char*)(src->data.ptr + step);
@@ -449,7 +485,7 @@ int track_find_contours(Itc_Mat_t* src, Track_Contour_t** pContour, Track_MemSto
 						goto resume_scan;		//跳出扫描器
 					is_hole = 1;				//设置孔标志
 				}
-				count++;
+				
 				Track_Seq_t* contour = itcCreateSeq(0, sizeof(Track_Contour_t), sizeof(Track_Point_t), storage);
 				contour->flags = is_hole;
 				//跟踪边缘的起点
@@ -458,8 +494,8 @@ int track_find_contours(Itc_Mat_t* src, Track_Contour_t** pContour, Track_MemSto
 				itcFetchContourEx(img + x - is_hole, step, itcPoint(origin.x, origin.y), contour, 126);
 				//lnbd.x = x - is_hole;			//当前扫描到边缘点的位置，用于下次扫描判断是否有包含关系
 
-				if (((Track_Contour_t*)(contour))->rect.width != 0 &&
-					((Track_Contour_t*)(contour))->rect.height != 0)
+				if (((Track_Contour_t*)(contour))->rect.width > 1 &&
+					((Track_Contour_t*)(contour))->rect.height > 1)
 				{
 					if ((*pContour) == NULL)
 					{
@@ -472,13 +508,14 @@ int track_find_contours(Itc_Mat_t* src, Track_Contour_t** pContour, Track_MemSto
 						contour->h_next = (*pContour)->h_next;
 						(*pContour)->h_next = contour;
 						contour->h_prev = (*pContour)->h_prev;
+						count++;
 					}
 				}
 			resume_scan:
 				prev = img[x];		//不能直接等于p,因为itcFetchContourEx会改变当前扫描过的点
 				//if (prev & -2)		//只保存已知的边缘
 				//{
-				//	lnbd.x = x;		//记录当前扫描到边缘点的位置，用于下一扫描使用
+				//	lnbd.x = x;		//记录当前扫描到边缘点的位置，用于下一扫描使用，判断包含关系
 				//}
 			}
 		}
@@ -491,6 +528,11 @@ int track_find_contours(Itc_Mat_t* src, Track_Contour_t** pContour, Track_MemSto
 
 int track_intersect_rect(Track_Rect_t *rectA, Track_Rect_t *rectB, int expand_dis)
 {
+	if (rectA == NULL || rectB == NULL)
+	{
+		return 0;
+	}
+
 	int x1_A = rectA->x;
 	int y1_A = rectA->y;
 	int x2_A = rectA->x + rectA->width;
@@ -501,22 +543,56 @@ int track_intersect_rect(Track_Rect_t *rectA, Track_Rect_t *rectB, int expand_di
 	int x2_B = rectB->x + rectB->width;
 	int y2_B = rectB->y + rectB->height;
 
-	int x1_min = ITC_MIN(x1_A, x1_B);
-	int y1_min = ITC_MIN(y1_A, y1_B);
-	int x1_max = ITC_MAX(x2_A, x2_B);
-	int y1_max = ITC_MAX(y2_A, y2_B);
+	int x_left = ITC_IMIN(x1_A, x1_B);
+	int y_top = ITC_IMIN(y1_A, y1_B);
+	int x_right = ITC_IMAX(x2_A, x2_B);
+	int y_bottom = ITC_IMAX(y2_A, y2_B);
+	//合并后的大小
+	int width = x_right - x_left;	
+	int height = y_bottom - y_top;
 
-	if ((rectA->width + rectB->width + expand_dis> x1_max - x1_min)
-		&& (rectA->height + rectB->height + expand_dis> y1_max - y1_min))
+	if (expand_dis>0)
 	{
-		//合并到rectA
-		rectA->x = x1_min;
-		rectA->y = y1_min;
-		rectA->width = x1_max - x1_min;
-		rectA->height = y1_max - y1_min;
-		return 1;
+		//expand_dis大于0表示只要两个矩形的边界距离小于expand_dis，函数都将返回1
+		if ((rectA->width + rectB->width + expand_dis < width)
+			|| (rectA->height + rectB->height + expand_dis < height))
+		{
+			return 0;
+		}
 	}
-	return 0;
+	else
+	{
+		if (x1_A > x2_B)
+			return 0;
+		if (y1_A > y2_B)
+			return 0;
+		if (x2_A < x1_B)
+			return 0;
+		if (y2_A < y1_B)
+			return 0;
+
+		if (expand_dis<0)
+		{
+			//对expand_dis进行处理
+			expand_dis = -expand_dis;
+			expand_dis = ITC_IMIN(expand_dis, rectA->width - (rectA->width >> 2));
+			expand_dis = ITC_IMIN(expand_dis, rectA->height - (rectA->height >> 2));
+			expand_dis = ITC_IMIN(expand_dis, rectB->width - (rectB->width >> 2));
+			expand_dis = ITC_IMIN(expand_dis, rectB->height - (rectB->height >> 2));
+			//求相交部分的大小
+			int width_int = ITC_IMIN(x2_A, x2_B) - ITC_IMAX(x1_A, x1_B);
+			int height_int = ITC_IMIN(y2_A, y2_B) - ITC_IMAX(y1_A, y1_B);
+			//若相交部分小于expand_dis，则返回0
+			if (expand_dis > width_int || expand_dis > height_int)
+				return 0;
+		}
+	}
+	//合并到rectA
+	rectA->x = x_left;
+	rectA->y = y_top;
+	rectA->width = width;
+	rectA->height = height;
+	return 1;
 }
 
 int track_filtrate_contours(Track_Contour_t** pContour, int size_Threshold, Track_Rect_t *rect_arr)
@@ -557,7 +633,7 @@ int track_filtrate_contours(Track_Contour_t** pContour, int size_Threshold, Trac
 
 //************************************
 // 函数名称: track_caluclateDirect_ROI
-// 函数说明：本函数假设运动像素速度较小，只计算连续的运动，即时间戳之差为1的运动
+// 函数说明：本函数假设运动像素速度较小
 // 作    者：XueYB
 // 作成日期：2015/10/14
 // 返 回 值: 
@@ -635,6 +711,11 @@ int track_calculateDirect_ROI(Itc_Mat_t* mhi, Track_Rect_t roi, int *direct)
 	//	}		
 	//}
 	
+	if (mhi == NULL || direct == NULL)
+	{
+		return 0;
+	}
+
 	int sum_gradientV = 0;		//垂直方向梯度
 	int sum_gradientH = 0;		//水平方向
 	int count_change = 0;
@@ -657,7 +738,8 @@ int track_calculateDirect_ROI(Itc_Mat_t* mhi, Track_Rect_t roi, int *direct)
 	uchar *img0 = (uchar*)(mhi->data.ptr + step*y1);
 	uchar *img1 = img0;
 	
-	int k_int_enhance = 10;	//用于提高除法精度
+	int sign_Value = 0;		//用于标示两次方向是否相等
+	int k_int_enhance = 1 << (ITC_FIXEDPOINT_ALIGN - 2);	//用于提高除法精度
 	int k = 0;
 	//计算水平方向速度
 	for (i = y1; i < y2; i++)
@@ -679,19 +761,18 @@ int track_calculateDirect_ROI(Itc_Mat_t* mhi, Track_Rect_t roi, int *direct)
 						///已经确定当前梯度的方向
 						if (img1[j] != 0 )
 						{
-							if (flag_signCurr*flag_signLase > 0)	//方向一致的才有效
+							sign_Value = flag_signCurr*flag_signLase;
+							if (sign_Value > 0)	//方向一致的才有效
 							{
 								sum_gradientH += (k - startX) / flag_signCurr;
 								count_changeX++;
 							}
 							else
 							{
-								if (flag_signCurr > 0)				//flag_signCurr > 0说明flag_signLase<0
-								{
-									sum_gradientH += (k - startX) / flag_signCurr;
-									count_changeX++;
-									sum_gradientH += (k - startX) / flag_signLase;
-									count_changeX++;
+								if (flag_signCurr > 0)				//flag_signCurr > 0说明flag_signLase<0，
+								{									//当前是升序的，所以要是有效的起点，上一次是降序，那么当前点也是一个有效的结束点,所以是+2
+									sum_gradientH += ((k - startX)*(flag_signLase + flag_signCurr) / sign_Value);	//((k - startX) / flag_signCurr)+((k - startX) / flag_signLase)
+									count_changeX += 2;
 								}
 							}
 						}
@@ -729,7 +810,7 @@ int track_calculateDirect_ROI(Itc_Mat_t* mhi, Track_Rect_t roi, int *direct)
 					else
 					{
 						//还未确定当前梯度的方向
-						if (flag_signCurr > 0)						//当前位置如果是升序的，那么是有效的
+						if (flag_signCurr > 0)						//当前位置如果是升序的，那么是有效的,因为是从左开始扫描
 						{
 							sum_gradientH += (k - startX) / flag_signCurr;
 							count_changeX++;
@@ -749,7 +830,7 @@ int track_calculateDirect_ROI(Itc_Mat_t* mhi, Track_Rect_t roi, int *direct)
 		k -= k_int_enhance;
 		if (img1[j - 1] != 0)//边界处理
 		{
-			if (flag_signLase > 0)
+			if (flag_signLase < 0)
 			{
 				sum_gradientH += (k - startX) / flag_signLase;
 				count_changeX++;
@@ -778,7 +859,8 @@ int track_calculateDirect_ROI(Itc_Mat_t* mhi, Track_Rect_t roi, int *direct)
 						//已经确定当前梯度的方向
 						if (img1[j] != 0)
 						{
-							if (flag_signCurr*flag_signLase > 0)
+							sign_Value = flag_signCurr*flag_signLase;
+							if (sign_Value > 0)
 							{
 								sum_gradientV += (k - startY) / flag_signCurr;
 								count_changeY++;
@@ -787,10 +869,8 @@ int track_calculateDirect_ROI(Itc_Mat_t* mhi, Track_Rect_t roi, int *direct)
 							{
 								if (flag_signCurr > 0)				//flag_signCurr > 0说明flag_signLase<0
 								{
-									sum_gradientV += (k - startY) / flag_signCurr;
-									count_changeY++;
-									sum_gradientV += (k - startY) / flag_signLase;
-									count_changeY++;
+									sum_gradientV += ((k - startY)*(flag_signLase + flag_signCurr) / sign_Value);	//((k - startX) / flag_signCurr)+((k - startX) / flag_signLase)
+									count_changeY += 2;
 								}
 							}
 						}
@@ -861,15 +941,15 @@ int track_calculateDirect_ROI(Itc_Mat_t* mhi, Track_Rect_t roi, int *direct)
 
 	int threshold = (roi.width*roi.height) >> 3;
 	count_change = count_change >> 1;
-	sum_gradientH = sum_gradientH << 10;
-	sum_gradientV = sum_gradientV << 10;
+	sum_gradientH = sum_gradientH << ITC_FIXEDPOINT_ALIGN;
+	sum_gradientV = sum_gradientV << ITC_FIXEDPOINT_ALIGN;
 	int gradientH = 0, gradientV = 0;
 	if (count_changeX > 0)
 		gradientH = sum_gradientH / (count_changeX*k_int_enhance);
 	if (count_changeY)
 		gradientV = sum_gradientV / (count_changeY*k_int_enhance);
 	int angle = (int)(atan2(gradientV, gradientH) * ITC_RADIAN_TO_ANGLE);
-	angle = angle < 0 ? angle + 360 : angle;
+	angle = angle < 0 ? angle + ITC_360DEGREE : angle;
 	*direct = angle;
 	if (count_change>threshold)
 	{
@@ -877,10 +957,10 @@ int track_calculateDirect_ROI(Itc_Mat_t* mhi, Track_Rect_t roi, int *direct)
 		int gradientH_abs = abs(gradientH);
 		if (gradientV_abs>gradientH_abs)
 		{
-			if (gradientV_abs > 512)
+			if (gradientV_abs > (1 << (ITC_FIXEDPOINT_ALIGN - 1)))
 				return 1;
 		}
-		else if (gradientH_abs > 512)
+		else if (gradientH_abs > (1 << (ITC_FIXEDPOINT_ALIGN - 1)))
 		{
 			return 2;
 		}
@@ -970,4 +1050,53 @@ int track_copyImage_ROI(Itc_Mat_t* src, Itc_Mat_t* dst, Track_Rect_t roi)
 	{
 		return 0;
 	}
+}
+
+BOOL track_resize_matData(uchar* srcData, Track_Size_t *ssize, char* dstData, Track_Size_t *dsize)
+{
+	if (srcData == NULL || ssize==NULL
+		|| dstData == NULL || dsize == NULL)
+	{
+		return FALSE;
+	}
+
+	int* x_ofs = (int*)itcAlloc(dsize->width * sizeof(x_ofs[0]));
+	if (x_ofs == NULL)
+	{
+		return FALSE;
+	}
+
+	int x, y, t;
+	int swidth2 = ssize->width << 1;
+	int sheight2 = ssize->height << 1;
+	int dwidth2 = dsize->width << 1;
+	int dheight2 = dsize->height << 1;
+	int minWidth = ITC_IMIN(ssize->width, dsize->width) - 1;
+	int minHeight = ITC_IMIN(ssize->height, dsize->height) - 1;
+	for (x = 0; x < dsize->width; x++)
+	{
+		t = (swidth2*x + minWidth) / dwidth2;
+		t -= t >= ssize->width;
+		x_ofs[x] = t;
+	}
+
+	int x_count = dsize->width - 2;
+	for (y = 0; y < dsize->height; y++, dstData += dsize->width)
+	{
+		const uchar* tsrc;
+		t = (sheight2*y + minHeight) / dheight2;
+		t -= t >= ssize->height;
+		tsrc = srcData + ssize->width*t;
+		for (x = 0; x <= x_count; x += 2)
+		{
+			uchar t0 = tsrc[x_ofs[x]];
+			uchar t1 = tsrc[x_ofs[x + 1]];
+
+			dstData[x] = t0;
+			dstData[x + 1] = t1;
+		}
+	}
+	itcFree_(x_ofs);
+	x_ofs = NULL;
+	return TRUE;
 }

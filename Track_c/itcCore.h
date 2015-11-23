@@ -10,20 +10,24 @@
 **************************************************************************/
 #ifndef itcCore_h__
 #define itcCore_h__
-#include <stdlib.h>
-#include <stdio.h>
-#include <math.h>
-#include <time.h>
-#include <ctype.h>
-#include <string.h>
-#include <assert.h>
-
 #include "itctype.h"
 #include "itcerror.h"
 #include "itcdatastructs.h"
 
 #ifdef  __cplusplus
 extern "C" {
+#endif
+
+#include <time.h>
+#define CONVERSION_STUTRACK_UNITStoMS (1000)
+
+#ifdef _WIN32
+#include <windows.h>
+#define  gettime GetTickCount
+#else
+#include <mcfw/src_bios6/utils/utils.h>
+#include <mcfw/interfaces/ti_media_std.h>
+#define  gettime Utils_getCurTimeInMsec
 #endif
 
 typedef struct Itc_Mat
@@ -87,10 +91,11 @@ int track_intersect_rect(Track_Rect_t *rectA, Track_Rect_t *rectB, int expand_di
 
 int track_calculateDirect_ROI(Itc_Mat_t* mhi, Track_Rect_t roi, int *direct);	//返回roi区域内的目标整体运动方向，
 
-void track_update_midValueBK(Itc_Mat_t* mat, Itc_Mat_t* matBK);				//用中值法更新背景
+void track_update_midValueBK(Itc_Mat_t* mat, Itc_Mat_t* matBK);					//用中值法更新背景
 
 int track_copyImage_ROI(Itc_Mat_t* src, Itc_Mat_t* dst, Track_Rect_t roi);
 
+BOOL  track_resize_matData(uchar* srcData, Track_Size_t* ssize, char* dstData, Track_Size_t* dsize);
 #ifdef  __cplusplus  
 }
 #endif  /* end of __cplusplus */ 

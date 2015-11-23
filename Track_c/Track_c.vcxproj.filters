@@ -30,6 +30,9 @@
     <ClCompile Include="itcTrack_draw_img.c">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="stuTrack_track_img.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="itcCore.h">
@@ -51,6 +54,9 @@
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="itcTrack_draw_img.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="stuTrack_track_img.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>

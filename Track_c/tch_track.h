@@ -95,8 +95,9 @@ typedef struct Data
 	Track_Point_t center;
 	Track_Point_t lastCenter;
 
-	Track_Size_t g_frameSize;
-	Track_Rect_t g_tchWin;
+	Track_Size_t g_frameSize; //压缩后的大小
+	Track_Size_t src_size;	//原始图像大小
+	Track_Rect_t g_tchWin;  //处理教师的图片大小
 	Track_Rect_t g_blkWin;
 
 	Itc_Mat_t *srcMat;

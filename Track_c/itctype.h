@@ -11,8 +11,6 @@
 #ifndef itctype_h_
 #define itctype_h_
 
-#include <stdio.h>
-
 #ifdef  __cplusplus
 extern "C" {
 #endif
@@ -22,15 +20,24 @@ extern "C" {
 #define TRUE 1
 #endif // !FALSE
 
+typedef int BOOL;
+typedef unsigned int size_t;
 typedef signed long long int64;
 typedef unsigned long long uint64;
 
 typedef unsigned char uchar;
 typedef unsigned short ushort;
 
-#define ITC_PI   3.1415926535897932384626433832795
-#define ITC_RADIAN_TO_ANGLE   57.29577951308
-#define ITC_LOG2 0.69314718055994530941723212145818
+#define FLT_EPSILON			1.192092896e-07F
+#define DBL_EPSILON			2.2204460492503131e-016
+#define ITC_180DEGREE			180
+#define ITC_360DEGREE			360
+#define ITC_PI				3.1415926535897932384626433832795
+#define ITC_RADIAN_TO_ANGLE	57.29577951308
+#define ITC_LOG2			0.69314718055994530941723212145818
+#define ITC_FIXEDPOINT_ALIGN	10
+
+#define ITC_NORM_ANGLE360(angle) (angle < 0 ? angle + ITC_360DEGREE : angle)
 
 #define ITC_SWAP(a,b,t) ((t) = (a), (a) = (b), (b) = (t))
 
@@ -45,7 +52,7 @@ typedef unsigned short ushort;
 #define  ITC_CMP(a,b)    (((a) > (b)) - ((a) < (b)))
 #define  ITC_SIGN(a)     ITC_CMP((a),0)
 
-
+#define ITC_IMAGE_ALIGN    8
 #define ITC_CN_MAX     512			//不应超过2047
 #define ITC_CN_SHIFT   3
 #define ITC_DEPTH_MAX  (1 << ITC_CN_SHIFT)
@@ -200,26 +207,26 @@ static const char itcPower2ShiftTab[] =
 	-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 5
 };
 
-#define ITC_MEMCPY_AUTO( dst, src, len )                                             \
+#define ITC_MEMCPY_AUTO( dst, src, len )                                            \
 {                                                                                   \
 	size_t _icv_memcpy_i_, _icv_memcpy_len_ = (len);                                \
 	char* _icv_memcpy_dst_ = (char*)(dst);                                          \
 	const char* _icv_memcpy_src_ = (const char*)(src);                              \
-if ((_icv_memcpy_len_ & (sizeof(int)-1)) == 0)                                 \
-{                                                                               \
-	assert(((size_t)_icv_memcpy_src_&(sizeof(int)-1)) == 0 && \
-	((size_t)_icv_memcpy_dst_&(sizeof(int)-1)) == 0);                  \
-for (_icv_memcpy_i_ = 0; _icv_memcpy_i_ < _icv_memcpy_len_;                 \
-	_icv_memcpy_i_ += sizeof(int))                                           \
-{                                                                           \
-	*(int*)(_icv_memcpy_dst_ + _icv_memcpy_i_) = \
-	*(const int*)(_icv_memcpy_src_ + _icv_memcpy_i_);                         \
-	}                                                                           \
+	if ((_icv_memcpy_len_ & (sizeof(int)-1)) == 0)									\
+	{                                                                               \
+		assert(((size_t)_icv_memcpy_src_&(sizeof(int)-1)) == 0 &&					\
+		((size_t)_icv_memcpy_dst_&(sizeof(int)-1)) == 0);							\
+		for (_icv_memcpy_i_ = 0; _icv_memcpy_i_ < _icv_memcpy_len_;                 \
+			_icv_memcpy_i_ += sizeof(int))                                          \
+		{                                                                           \
+			*(int*)(_icv_memcpy_dst_ + _icv_memcpy_i_) =							\
+			*(const int*)(_icv_memcpy_src_ + _icv_memcpy_i_);                       \
+		}                                                                           \
 	}                                                                               \
 	else                                                                            \
-{                                                                               \
-for (_icv_memcpy_i_ = 0; _icv_memcpy_i_ < _icv_memcpy_len_; _icv_memcpy_i_++)\
-	_icv_memcpy_dst_[_icv_memcpy_i_] = _icv_memcpy_src_[_icv_memcpy_i_];    \
+	{                                                                               \
+		for (_icv_memcpy_i_ = 0; _icv_memcpy_i_ < _icv_memcpy_len_; _icv_memcpy_i_++)\
+			_icv_memcpy_dst_[_icv_memcpy_i_] = _icv_memcpy_src_[_icv_memcpy_i_];    \
 	}                                                                               \
 }
 
@@ -305,6 +312,10 @@ typedef struct Track_Size_t
 	int height;
 }Track_Size_t;
 
+typedef struct _colour
+{
+	uchar val[3];
+}Track_Colour_t;
 //_inline Track_Size_t itcSize(int width, int height);
 
 typedef int(*callbackmsg)(const char *format, ...);//用于输出调试信息的函数指针

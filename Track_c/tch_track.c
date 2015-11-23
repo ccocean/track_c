@@ -1,5 +1,28 @@
 #include "tch_track.h"
 
+static void tchTrack_Copy_matData(Tch_Data_t* datas, uchar* srcData)
+{
+	//ITC_FUNCNAME("FUNCNAME:stuTrack_resizeCopy_matData\n");
+	int y = 0;
+	int height = datas->g_frameSize.height;
+	int dst_step = datas->g_frameSize.width;
+	int src_step = datas->src_size.width;
+	if (dst_step > src_step)
+	{
+		//_PRINTF("The image cache size error!\n");
+		datas->sysData.callbackmsg_func("The image cache size error!\n");
+		return;
+	}
+
+	uchar* dst_p = datas->srcMat->data.ptr;
+	for (y = 0; y < height; y++)
+	{
+		memcpy(dst_p, srcData, sizeof(uchar)* dst_step);
+		dst_p += dst_step;
+		srcData += src_step;
+	}
+}
+
 int tch_trackInit(Tch_Data_t *data)
 {
 	if (!data)
@@ -93,7 +116,14 @@ int tch_track(uchar *src, uchar* pUV, TeaITRACK_Params *params, Tch_Data_t *data
 	res->pos = -1;
 	res->status = -1;
 	int i = 0, j = 0;
+
+#ifdef _WIN32
 	memcpy(data->srcMat->data.ptr, src, data->srcMat->step*data->srcMat->rows);
+#else
+	tchTrack_Copy_matData(data,src);
+#endif
+
+
 	if (data->g_count>0)
 	{
 		ITC_SWAP(data->currMatTch, data->prevMatTch, data->tempMatTch);
