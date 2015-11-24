@@ -141,8 +141,8 @@ int tch_track(uchar *src, uchar* pUV, TeaITRACK_Params *params, Tch_Data_t *data
 	Track_Rect_t s_bigRects[100];//筛选出来的大面积运动物体
 	int s_maxdist = -1;//比较多个面积
 	int s_rectCnt = 0;
-	/*Trcak_Colour_t color = colour_RGB2YUV(255, 255, 0);
-	Track_Size_t imgSize = { 480, 264 };*/
+	Track_Colour_t color = colour_RGB2YUV(255, 255, 0);
+	Track_Size_t imgSize = { 480, 264 };
 	
 
 	if (data->g_count>0)
@@ -196,9 +196,9 @@ int tch_track(uchar *src, uchar* pUV, TeaITRACK_Params *params, Tch_Data_t *data
 			{
 				if (data->pos_slide.left <= data->g_prevPosIndex&&data->g_prevPosIndex <= data->pos_slide.right)
 				{
-					data->slideTimer.finish = clock();
+					data->slideTimer.finish = gettime();
 					data->slideTimer.deltaTime = data->slideTimer.finish - data->slideTimer.start;
-					if ((data->slideTimer.deltaTime / CLOCKS_PER_SEC) > params->threshold.stand)
+					if ((data->slideTimer.deltaTime ) > params->threshold.stand)
 					{
 						if (data->g_isOnStage == 0)
 						{
@@ -218,7 +218,7 @@ int tch_track(uchar *src, uchar* pUV, TeaITRACK_Params *params, Tch_Data_t *data
 				{
 					data->slideTimer.finish = 0;
 					data->slideTimer.deltaTime = 0;
-					data->slideTimer.start = clock();
+					data->slideTimer.start = gettime();
 				}
 			}
 		}
@@ -243,6 +243,7 @@ int tch_track(uchar *src, uchar* pUV, TeaITRACK_Params *params, Tch_Data_t *data
 				data->tch_lastStatus = RETURN_TRACK_TCH_MULITY;
 				res->status = RETURN_TRACK_TCH_MULITY;
 				res->pos = -1;
+				data->slideTimer.start = gettime();
 				return RETURN_TRACK_TCH_MULITY;
 			}
 		}
@@ -251,13 +252,14 @@ int tch_track(uchar *src, uchar* pUV, TeaITRACK_Params *params, Tch_Data_t *data
 			
 			for (i = 0; i < s_rectCnt; i++)
 			{
+				//printf("y: %d, h: %d", s_bigRects[i].y, s_bigRects[i].height);
 				data->g_isMulti = 0;
 				int direct = -1;
 				drawRect.x = s_bigRects[i].x + data->g_tchWin.x;
 				drawRect.y = s_bigRects[i].y + data->g_tchWin.y;
 				drawRect.width = s_rectsTch[i].width;
 				drawRect.height = s_rectsTch[i].height;
-				//track_draw_rectangle(src, pUV, &imgSize, &drawRect, &color, YUV420_type);
+				track_draw_rectangle(src, pUV, &imgSize, &drawRect, &color, YUV420_type);
 				direct = tch_calculateDirect_TCH(data->mhiMatTch, s_rectsTch[i]);
 				if (direct>-1)
 				{
@@ -270,7 +272,6 @@ int tch_track(uchar *src, uchar* pUV, TeaITRACK_Params *params, Tch_Data_t *data
 						//if (data->tempCams[j].left_pixel <= data->center.x&&data->center.x <= data->tempCams[j].right_pixel)
 						if (ptr->left_pixel<=data->center.x&&data->center.x<=ptr->right_pixel)
 						{
-							
 							if (data->g_prevPosIndex==-1)
 							{
 								//data->g_prevPosIndex = data->ptr[j].index;
@@ -293,6 +294,7 @@ int tch_track(uchar *src, uchar* pUV, TeaITRACK_Params *params, Tch_Data_t *data
 										res->status = RETURN_TRACK_TCH_MULITY;
 										res->pos = data->g_prevPosIndex;
 										ptr = NULL;
+										data->slideTimer.start = gettime();
 										return RETURN_TRACK_TCH_MULITY;
 									}
 									else
@@ -314,7 +316,7 @@ int tch_track(uchar *src, uchar* pUV, TeaITRACK_Params *params, Tch_Data_t *data
 							if (data->pos_slide.center<0)//当预置位滑框未被使用时
 							{
 								//初始化计时器
-								data->slideTimer.start = clock();
+								data->slideTimer.start = gettime();
 								if (data->g_posIndex<data->pos_slide.width)
 								{
 									data->pos_slide.center = data->pos_slide.width;
@@ -345,9 +347,9 @@ int tch_track(uchar *src, uchar* pUV, TeaITRACK_Params *params, Tch_Data_t *data
 									{
 										if (data->g_posIndex == 0)
 										{
-											data->slideTimer.finish = clock();
+											data->slideTimer.finish = gettime();
 											data->slideTimer.deltaTime = data->slideTimer.finish - data->slideTimer.start;
-											if ((data->slideTimer.deltaTime / CLOCKS_PER_SEC) > params->threshold.stand)
+											if ((data->slideTimer.deltaTime) > params->threshold.stand)
 											{
 												if (data->g_isMulti == 0)//不是多目标
 												{
@@ -373,6 +375,7 @@ int tch_track(uchar *src, uchar* pUV, TeaITRACK_Params *params, Tch_Data_t *data
 													data->tch_lastStatus = RETURN_TRACK_TCH_MULITY;
 													res->status = RETURN_TRACK_TCH_MULITY;
 													ptr = NULL;
+													data->slideTimer.start = gettime();
 													return RETURN_TRACK_TCH_MULITY;
 												}
 											}
@@ -388,7 +391,7 @@ int tch_track(uchar *src, uchar* pUV, TeaITRACK_Params *params, Tch_Data_t *data
 										{
 											data->slideTimer.finish = 0;
 											data->slideTimer.deltaTime = 0;
-											data->slideTimer.start = clock();
+											data->slideTimer.start = gettime();
 										}
 										data->pos_slide.center = data->pos_slide.width;
 										data->pos_slide.left = data->pos_slide.center - data->pos_slide.width;
@@ -398,9 +401,9 @@ int tch_track(uchar *src, uchar* pUV, TeaITRACK_Params *params, Tch_Data_t *data
 									{
 										if (data->g_posIndex == TRACK_NUMOF_POSITION - 1)
 										{
-											data->slideTimer.finish = clock();
+											data->slideTimer.finish = gettime();
 											data->slideTimer.deltaTime = data->slideTimer.finish - data->slideTimer.start;
-											if ((data->slideTimer.deltaTime / CLOCKS_PER_SEC) > params->threshold.stand)
+											if ((data->slideTimer.deltaTime ) > params->threshold.stand)
 											{
 												if (data->g_isMulti == 0)//不是多目标
 												{
@@ -428,6 +431,7 @@ int tch_track(uchar *src, uchar* pUV, TeaITRACK_Params *params, Tch_Data_t *data
 													res->status = RETURN_TRACK_TCH_MULITY;
 													res->pos = -1;
 													ptr = NULL;
+													data->slideTimer.start = gettime();
 													return RETURN_TRACK_TCH_MULITY;
 												}
 											}
@@ -443,7 +447,7 @@ int tch_track(uchar *src, uchar* pUV, TeaITRACK_Params *params, Tch_Data_t *data
 										{
 											data->slideTimer.finish = 0;
 											data->slideTimer.deltaTime = 0;
-											data->slideTimer.start = clock();
+											data->slideTimer.start = gettime();
 										}
 										data->pos_slide.center = TRACK_NUMOF_POSITION - 1 - data->pos_slide.width;
 										data->pos_slide.left = data->pos_slide.center - data->pos_slide.width;
@@ -457,7 +461,7 @@ int tch_track(uchar *src, uchar* pUV, TeaITRACK_Params *params, Tch_Data_t *data
 
 										data->slideTimer.finish = 0;
 										data->slideTimer.deltaTime = 0;
-										data->slideTimer.start = clock();
+										data->slideTimer.start = gettime();
 									}
 
 									break;
@@ -470,7 +474,7 @@ int tch_track(uchar *src, uchar* pUV, TeaITRACK_Params *params, Tch_Data_t *data
 
 										data->slideTimer.finish = 0;
 										data->slideTimer.deltaTime = 0;
-										data->slideTimer.start = clock();
+										data->slideTimer.start = gettime();
 
 										data->pos_slide.center = data->pos_slide.width;
 										data->pos_slide.left = data->pos_slide.center - data->pos_slide.width;
@@ -481,7 +485,7 @@ int tch_track(uchar *src, uchar* pUV, TeaITRACK_Params *params, Tch_Data_t *data
 
 										data->slideTimer.finish = 0;
 										data->slideTimer.deltaTime = 0;
-										data->slideTimer.start = clock();
+										data->slideTimer.start = gettime();
 
 										data->pos_slide.center = TRACK_NUMOF_POSITION - 1 - data->pos_slide.width;
 										data->pos_slide.left = data->pos_slide.center - data->pos_slide.width;
@@ -495,7 +499,7 @@ int tch_track(uchar *src, uchar* pUV, TeaITRACK_Params *params, Tch_Data_t *data
 
 										data->slideTimer.finish = 0;
 										data->slideTimer.deltaTime = 0;
-										data->slideTimer.start = clock();
+										data->slideTimer.start = gettime();
 									}
 									break;
 								}
@@ -503,9 +507,9 @@ int tch_track(uchar *src, uchar* pUV, TeaITRACK_Params *params, Tch_Data_t *data
 								else
 								{
 									//在这里加入时间计算，到了阈值之后告诉Control该调特写镜头了。
-									data->slideTimer.finish = clock();
+									data->slideTimer.finish = gettime();
 									data->slideTimer.deltaTime = data->slideTimer.finish - data->slideTimer.start;
-									if ((data->slideTimer.deltaTime / CLOCKS_PER_SEC) > params->threshold.stand)
+									if ((data->slideTimer.deltaTime ) > params->threshold.stand)
 									{
 										if (data->g_isMulti == 0)//不是多目标
 										{
@@ -532,6 +536,7 @@ int tch_track(uchar *src, uchar* pUV, TeaITRACK_Params *params, Tch_Data_t *data
 											res->status = RETURN_TRACK_TCH_MULITY;
 											res->pos = -1;
 											ptr = NULL;
+											data->slideTimer.start = gettime();
 											return RETURN_TRACK_TCH_MULITY;
 										}
 									}
@@ -554,9 +559,9 @@ int tch_track(uchar *src, uchar* pUV, TeaITRACK_Params *params, Tch_Data_t *data
 		//tch_pos = &g_prevPosIndex;
 		if (data->tch_lastStatus==3)
 		{
-			data->slideTimer.finish = clock();
+			data->slideTimer.finish = gettime();
 			data->slideTimer.deltaTime = data->slideTimer.finish - data->slideTimer.start;
-			if ((data->slideTimer.deltaTime / CLOCKS_PER_SEC) > params->threshold.stand)
+			if ((data->slideTimer.deltaTime ) > params->threshold.stand)
 			{
 				res->status = RETURN_TRACK_TCH_MOVEINVIEW;
 				res->pos = data->g_prevPosIndex;

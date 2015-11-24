@@ -32,16 +32,18 @@
 #define TRACK_DEFAULT_BLK_H 37
 
 //站定时间的阈值
-#define TRACK_STAND_THRESHOLD 2
+#define TRACK_STAND_THRESHOLD 2000
 #define TRACK_TARGETAREA_THRESHOLD 7200
-#define TRACK_TCHOUTSIDE_THRESHOLD 95
+#define TRACK_TCHOUTSIDE_THRESHOLD TRACK_DEFAULT_TCH_H*0.65
 
 
 //计时器
 typedef struct TrackTimer
 {
-	clock_t start;
-	clock_t finish;
+	DWORD start;
+	DWORD finish;
+	//clock_t start;
+	//clock_t finish;
 	/*double timeLast;
 	double timeNow;*/
 	double deltaTime;

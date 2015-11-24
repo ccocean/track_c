@@ -19,7 +19,7 @@ typedef struct Tch_Rect_t
 typedef struct Result
 {
 	int status;
-	int pos;
+	int pos; //云台摄像机拍摄的位置
 }Tch_Result_t;
 
 //阈值结构体

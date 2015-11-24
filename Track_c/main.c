@@ -26,13 +26,13 @@ int main()
 	//cvNamedWindow("teacher", 1);
 	char* g_videoPath;
 	char* src=0;
-	int g_count = 0;
-	g_videoPath = "video/teacher.mp4";
+	//int g_count = 0;
+	g_videoPath = "video/teacher2.mp4";
 	/*g_frameSize = itcSize(640, 360);
 	g_tchWin = itcRect(0, 100, 640, 200);
 	g_blkWin = itcRect(0, 35, 640, 50);*/
 	Tch_Size_t _frame = { WIDTH, HEIGHT };
-	Tch_Rect_t tch = { 0, 75, WIDTH, 150 };//{0,100,640,200}
+	Tch_Rect_t tch = { 0, 0, WIDTH, 150 };//{0,75,480,150}
 	Tch_Rect_t blk = { 0, 26, WIDTH, 37 }; //{0, 35, 640, 50}
 	Tch_Threshold_t threshold = { 2, 7200, 95 };//{2, 12000, 130}
 	TeaITRACK_Params *argument;
@@ -99,7 +99,7 @@ int main()
 		delta = (end - start) ;
 		printf("status:%d, position:%d, time:%f\r\n", res->status,res->pos,(double)(delta/CLOCKS_PER_SEC));
 		cvWaitKey(1);
-		g_count++;
+		//g_count++;
 	}
 	tch_trackDestroy(data);
 
