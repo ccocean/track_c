@@ -8,9 +8,6 @@
     *  @date     : 2015/10/09 11:45 
     *  @brief    : 一些错误的处理 
 **************************************************************************/
-#ifndef _ITCERROR_H_
-#define _ITCERROR_H_
-#include <stdlib.h>
 
 #ifndef itcerror_h__
 #define itcerror_h__
@@ -33,4 +30,4 @@
 #define  ITC_BADARG_ERR   -49  //ipp comp
 
 #endif // itcerror_h__
-#endif
+

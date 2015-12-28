@@ -202,7 +202,7 @@ static BOOL stuTrack_judgeStand_ROI(StuITRACK_InteriorParams* interior_params_p,
 	double ratio_lengthWidth = (((double)track_stand.roi.height) / track_stand.roi.width);
 	if (((track_stand.count_up > stuTrack_standCount_threshold && track_stand.count_teack > (stuTrack_standCount_threshold + EXPADN_STURECK_STAND_COUNTTAK_THRESHOLD))
 		|| track_stand.count_up > (stuTrack_standCount_threshold + EXPADN_STURECK_STAND_COUNTUP_THRESHOLD))
-		&& (ratio_lengthWidth - THRESHOLD_STURECK_RATIO_HENIGHTWIDTH) <= DBL_EPSILON)
+		&& (ratio_lengthWidth - THRESHOLD_STURECK_RATIO_HENIGHTWIDTH) <= ITC_DBL_EPSILON)
 	{
 		return TRUE;
 	}
@@ -351,7 +351,7 @@ static void stuTrack_proStandDown_ROI(StuITRACK_InteriorParams* interior_params_
 	stuTrack_analyze_ROI(interior_params_p);			//分析候选roi
 }
 
-static void stuTrack_drawShow_imgData(StuITRACK_InteriorParams* interior_params_p, uchar* imageData, uchar* bufferuv)
+static void stuTrack_drawShow_imgData(StuITRACK_InteriorParams* interior_params_p, itc_uchar* imageData, itc_uchar* bufferuv)
 {
 	ITC_FUNCNAME("FUNCNAME:stuTrack_drawShow_imgData\n");
 	//if (interior_params_p->stuTrack_Draw_flag == FALSE)
@@ -362,7 +362,6 @@ static void stuTrack_drawShow_imgData(StuITRACK_InteriorParams* interior_params_
 	//画出结果
 	int i = 0;
 	Track_Size_t *srcimg_size = &interior_params_p->srcimg_size;	//原始图像大小
-	Track_Rect_t *stuTrack_rect_arr = interior_params_p->stuTrack_rect_arr;
 	StuTrack_Stand_t* stuTrack_stand = interior_params_p->stuTrack_stand;
 	StuTrack_BigMoveObj_t* stuTrack_bigMOveObj = interior_params_p->stuTrack_bigMOveObj;
 
@@ -398,7 +397,7 @@ static void stuTrack_drawShow_imgData(StuITRACK_InteriorParams* interior_params_
 			{
 				track_draw_rectangle(imageData, bufferuv, srcimg_size, rect, &interior_params_p->blue_colour, YUV420_type);
 			}
-			//track_draw_line(imageData, bufferuv, srcimg_size, current_position, origin_position, &interior_params_p->green_colour, YUV420_type);//
+			track_draw_line(imageData, bufferuv, srcimg_size, current_position, origin_position, &interior_params_p->green_colour, YUV420_type);//
 		}
 		else
 		{
@@ -426,6 +425,7 @@ static void stuTrack_drawShow_imgData(StuITRACK_InteriorParams* interior_params_
 		}
 	}
 
+	//Track_Rect_t *stuTrack_rect_arr = interior_params_p->stuTrack_rect_arr;
 	//for (i = 0; i < interior_params_p->count_stuTrack_rect; i++)
 	//{
 	//	int direct;
@@ -473,7 +473,7 @@ static void stuTrack_reslut(StuITRACK_InteriorParams* interior_params_p, StuITRA
 	}
 }
 
-static void stuTrack_Copy_matData(StuITRACK_InteriorParams* interior_params_p, uchar* srcData)
+static void stuTrack_Copy_matData(StuITRACK_InteriorParams* interior_params_p, itc_uchar* srcData)
 {
 	ITC_FUNCNAME("FUNCNAME:stuTrack_resizeCopy_matData\n");
 	int y = 0;
@@ -486,10 +486,10 @@ static void stuTrack_Copy_matData(StuITRACK_InteriorParams* interior_params_p, u
 		return;
 	}
 
-	uchar* dst_p = interior_params_p->currMat->data.ptr;
+	itc_uchar* dst_p = interior_params_p->currMat->data.ptr;
 	for (y = 0; y < height; y++)
 	{
-		memcpy(dst_p, srcData, sizeof(uchar)* dst_step);
+		memcpy(dst_p, srcData, sizeof(itc_uchar)* dst_step);
 		dst_p += dst_step;
 		srcData += src_step;
 	}
@@ -501,8 +501,10 @@ static void stuTrack_Copy_matData(StuITRACK_InteriorParams* interior_params_p, u
 #define CHECH_STURRACK_RESULT_ERROR4 4
 #define CHECH_STURRACK_RESULT_ERROR5 5
 #define CHECH_STURRACK_RESULT_ERROR6 6
+#define CHECH_STURRACK_RESULT_ERROR7 7
 static int stuTrack_check_clientParams(const StuITRACK_ClientParams_t* clientParams_p)
 {
+
 	if (clientParams_p->stuTrack_vertex[0].x < 0 ||
 		clientParams_p->stuTrack_vertex[1].x < 0 ||
 		clientParams_p->stuTrack_vertex[2].x < 0 ||
@@ -539,6 +541,12 @@ static int stuTrack_check_clientParams(const StuITRACK_ClientParams_t* clientPar
 	{
 		return CHECH_STURRACK_RESULT_ERROR6;
 	}
+
+	if (clientParams_p->height <= 0 || clientParams_p->width <= 0)
+	{
+		return CHECH_STURRACK_RESULT_ERROR7;
+	}
+
 	return CHECH_STURRACK_RESULT_OK;
 }
 
@@ -709,7 +717,7 @@ void stuTrack_process(const StuITRACK_Params *inst, StuITRACK_InteriorParams* in
 		interior_params_p->srcimg_size.height = inst->systemParams.nsrcHeight;									
 	}
 
-	stuTrack_Copy_matData(interior_params_p, (uchar*)imageData);
+	stuTrack_Copy_matData(interior_params_p, (itc_uchar*)imageData);
 	interior_params_p->result_flag = RESULT_STUTRACK_NULL_FLAG;	//清空变化状态
 	Track_Contour_t* firstContour = NULL;
 	if (interior_params_p->_count>1)
@@ -724,7 +732,7 @@ void stuTrack_process(const StuITRACK_Params *inst, StuITRACK_InteriorParams* in
 	ITC_SWAP(interior_params_p->currMat, interior_params_p->lastMat, interior_params_p->tempMat);
 	interior_params_p->_count++;
 
-	stuTrack_drawShow_imgData(interior_params_p, (uchar*)imageData, (uchar*)bufferuv);	//绘制处理效果
+	stuTrack_drawShow_imgData(interior_params_p, (itc_uchar*)imageData, (itc_uchar*)bufferuv);	//绘制处理效果
 	stuTrack_reslut(interior_params_p, return_params);									//填写返回结果
 }
 

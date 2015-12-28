@@ -26,7 +26,6 @@ extern "C" {
 #define  gettime GetTickCount
 #else
 #include <mcfw/src_bios6/utils/utils.h>
-#include <mcfw/interfaces/ti_media_std.h>
 #define  gettime Utils_getCurTimeInMsec
 #endif
 
@@ -41,7 +40,7 @@ typedef struct Itc_Mat
 
 	union
 	{
-		uchar* ptr;
+		itc_uchar* ptr;
 		short* s;
 		int* i;
 		float* fl;
@@ -95,7 +94,7 @@ void track_update_midValueBK(Itc_Mat_t* mat, Itc_Mat_t* matBK);					//用中值法更
 
 int track_copyImage_ROI(Itc_Mat_t* src, Itc_Mat_t* dst, Track_Rect_t roi);
 
-BOOL  track_resize_matData(uchar* srcData, Track_Size_t* ssize, char* dstData, Track_Size_t* dsize);
+itc_BOOL  track_resize_matData(itc_uchar* srcData, Track_Size_t* ssize, char* dstData, Track_Size_t* dsize);
 #ifdef  __cplusplus  
 }
 #endif  /* end of __cplusplus */ 

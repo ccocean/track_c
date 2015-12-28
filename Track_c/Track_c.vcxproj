@@ -85,6 +85,7 @@
     <ClCompile Include="itcdatastructs.c" />
     <ClCompile Include="itcTrack_draw_img.c" />
     <ClCompile Include="main.c" />
+    <ClCompile Include="Tch_Queue.c" />
     <ClCompile Include="stuTrack_track_img.c" />
     <ClCompile Include="tch_track.c" />
   </ItemGroup>
@@ -94,6 +95,7 @@
     <ClInclude Include="itcerror.h" />
     <ClInclude Include="itcTrack_draw_img.h" />
     <ClInclude Include="itctype.h" />
+    <ClInclude Include="Tch_Queue.h" />
     <ClInclude Include="stuTrack_track_img.h" />
     <ClInclude Include="tch_params.h" />
     <ClInclude Include="tch_track.h" />

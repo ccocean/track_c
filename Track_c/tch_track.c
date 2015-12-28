@@ -1,12 +1,14 @@
 #include "tch_track.h"
 
-static void tchTrack_Copy_matData(Tch_Data_t* datas, uchar* srcData)
+//static Track_Point_t pos_1 = { -1 };
+//static Track_Point_t pos_2 = { -1 };
+
+static void tchTrack_Copy_matData(Tch_Data_t* datas, itc_uchar* srcData, Track_Rect_t tch, Track_Rect_t blk)
 {
 	//ITC_FUNCNAME("FUNCNAME:stuTrack_resizeCopy_matData\n");
 	int y = 0;
-	int height = datas->g_frameSize.height;
 	int dst_step = datas->g_frameSize.width;
-	int src_step = datas->src_size.width;
+	int src_step = datas->sysData.width;
 	if (dst_step > src_step)
 	{
 		//_PRINTF("The image cache size error!\n");
@@ -14,13 +16,25 @@ static void tchTrack_Copy_matData(Tch_Data_t* datas, uchar* srcData)
 		return;
 	}
 
-	uchar* dst_p = datas->srcMat->data.ptr;
-	for (y = 0; y < height; y++)
+	itc_uchar* dst_blk = datas->currMatBlk->data.ptr;
+	itc_uchar* src_blk = srcData + src_step*blk.y + blk.x;
+	for (y = 0; y < blk.height; y++)
 	{
-		memcpy(dst_p, srcData, sizeof(uchar)* dst_step);
-		dst_p += dst_step;
-		srcData += src_step;
+		memcpy(dst_blk, src_blk, sizeof(itc_uchar)* dst_step);
+		dst_blk += dst_step;
+		src_blk += src_step;
 	}
+
+	itc_uchar* dst_tch = datas->currMatTch->data.ptr;
+	itc_uchar* src_tch = srcData + src_step*tch.y + tch.x;
+
+	for (y = 0; y < tch.height; y++)
+	{
+		memcpy(dst_tch, src_tch, sizeof(itc_uchar)* dst_step);
+		dst_tch += dst_step;
+		src_tch += src_step;
+	}
+
 }
 
 int tch_trackInit(Tch_Data_t *data)
@@ -33,7 +47,7 @@ int tch_trackInit(Tch_Data_t *data)
 	int i=0;
 	data->track_pos_width = data->g_frameSize.width / data->numOfPos;
 
-	data->tch_lastStatus = 0;
+	data->tch_lastStatus = RETURN_TRACK_TCH_NULL;
 
 	
 	data->g_posIndex = -1;
@@ -50,6 +64,10 @@ int tch_trackInit(Tch_Data_t *data)
 	data->slideTimer.finish = 0;
 	data->slideTimer.deltaTime = 0;
 
+	data->tch_timer.start = 0;
+	data->tch_timer.finish = 0;
+	data->tch_timer.deltaTime = 0;
+
 	data->pos_slide.width = (data->numOfSlide - 1) / 2;
 	data->pos_slide.center = -1;
 	data->pos_slide.left = -1;
@@ -63,16 +81,12 @@ int tch_trackInit(Tch_Data_t *data)
 		ptr->index = i / data->track_pos_width;
 		ptr->left_pixel = i;
 		ptr->right_pixel = i + data->track_pos_width;
-		//printf("index:%d, left:%d, right:%d\r\n", ptr->index, ptr->left_pixel, ptr->right_pixel);
 		ptr++;
-		/*data->tempCams[i / data->track_pos_width].index = i / data->track_pos_width;
-		data->tempCams[i / data->track_pos_width].left_pixel = i;
-		data->tempCams[i / data->track_pos_width].right_pixel = i + data->track_pos_width;*/
 	}
 	
 	ptr = NULL;
 
-	data->srcMat = itc_create_mat(data->g_frameSize.height, data->g_frameSize.width, ITC_8UC1);
+	//data->srcMat = itc_create_mat(data->g_frameSize.height, data->g_frameSize.width, ITC_8UC1);
 
 	data->prevMatTch = itc_create_mat(data->g_tchWin.height, data->g_tchWin.width, ITC_8UC1);
 	data->prevMatBlk = itc_create_mat(data->g_blkWin.height, data->g_blkWin.width, ITC_8UC1);
@@ -90,38 +104,165 @@ int tch_trackInit(Tch_Data_t *data)
 	data->storageTch = itcCreateChildMemStorage(data->storage);
 	data->storageBlk = itcCreateChildMemStorage(data->storage);
 
+	data->tch_queue = InitQueue();
 	//data->callbackmsg_func = printf;
 
 	return 0;
 }
 
-int tch_track(uchar *src, uchar* pUV, TeaITRACK_Params *params, Tch_Data_t *data, Tch_Result_t *res)
-//int tch_track(IplImage *src, TeaITRACK_Params *params, Tch_Data_t *data, Tch_Result_t *res)
+static void tchTrack_drawShow_imgData(Tch_Data_t* interior_params, itc_uchar* imageData, itc_uchar* bufferuv, Track_Rect_t *rect, Track_Colour_t *color)
 {
+	Track_Size_t srcimg_size = { interior_params->sysData.width, interior_params ->sysData.height};	//原始图像大小
 #ifdef _WIN32
 	int YUV420_type = TRACK_DRAW_YUV420P;
 #endif
 #ifndef _WIN32
 	int YUV420_type = TRACK_DRAW_YUV420SP;
 #endif
+	track_draw_rectangle(imageData, bufferuv, &srcimg_size, rect, color, YUV420_type);
+}
+
+static int tch_return_maintain(Tch_Timer_t *tch_timer, int in)
+{
+	int out;
+	if (in == TRUE)
+	{
+		tch_timer->deltaTime = 0;
+		tch_timer->start = gettime();
+		out = TRUE;
+		return out;
+	}
+	else
+	{
+		tch_timer->finish = gettime();
+		tch_timer->deltaTime = tch_timer->finish - tch_timer->start;
+		if (tch_timer->deltaTime>2000)
+		{
+			tch_timer->deltaTime = 0;
+			tch_timer->start = gettime();
+			out = TRUE;
+		}
+		else
+		{
+			out = FALSE;
+		}
+		return out;
+	}
+}
+
+void static tch_updatePosition(Tch_Data_t *data)
+{
+	//更新位置
+	data->g_prevPosIndex = data->g_posIndex;
+	//pos_1 = data->center;
+	if (data->g_posIndex == data->pos_slide.right || data->g_posIndex == data->pos_slide.left)//当人物走到滑框的边缘，就更新滑框，相当于调全景移动云台相机
+	{
+		if (data->g_posIndex < data->pos_slide.width)//左端
+		{
+			if (data->g_posIndex == 0)//在最左端时维护时间
+			{
+				data->slideTimer.finish = gettime();
+				data->slideTimer.deltaTime = data->slideTimer.finish - data->slideTimer.start;
+			}
+			else//否则更新时间
+			{
+				data->slideTimer.finish = 0;
+				data->slideTimer.deltaTime = 0;
+				data->slideTimer.start = gettime();
+			}
+			data->pos_slide.center = data->pos_slide.width;
+			data->pos_slide.left = data->pos_slide.center - data->pos_slide.width;
+			data->pos_slide.right = data->pos_slide.center + data->pos_slide.width;
+		}
+		else if (data->g_posIndex > data->numOfPos - 1 - data->pos_slide.width)//右端
+		{
+			if (data->g_posIndex == data->numOfPos - 1)//在最右端时维护时间
+			{
+				data->slideTimer.finish = gettime();
+				data->slideTimer.deltaTime = data->slideTimer.finish - data->slideTimer.start;
+			}
+			else//否则更新时间
+			{
+				data->slideTimer.finish = 0;
+				data->slideTimer.deltaTime = 0;
+				data->slideTimer.start = gettime();
+			}
+			data->pos_slide.center = data->numOfPos - 1 - data->pos_slide.width;
+			data->pos_slide.left = data->pos_slide.center - data->pos_slide.width;
+			data->pos_slide.right = data->pos_slide.center + data->pos_slide.width;
+		}
+		else
+		{
+			data->pos_slide.center = data->g_posIndex;
+			data->pos_slide.left = data->pos_slide.center - data->pos_slide.width;
+			data->pos_slide.right = data->pos_slide.center + data->pos_slide.width;
+
+			data->slideTimer.finish = 0;
+			data->slideTimer.deltaTime = 0;
+			data->slideTimer.start = gettime();
+		}
+	}
+	else if (data->pos_slide.left > data->g_posIndex || data->g_posIndex > data->pos_slide.right)
+	{
+		//当追踪到的目标已经在上一帧滑框的外面则立刻更新滑框
+		if (data->g_posIndex < data->pos_slide.width)
+		{
+			data->pos_slide.center = data->pos_slide.width;
+			data->pos_slide.left = data->pos_slide.center - data->pos_slide.width;
+			data->pos_slide.right = data->pos_slide.center + data->pos_slide.width;
+		}
+		else if (data->g_posIndex > data->numOfPos - 1 - data->pos_slide.width)
+		{
+			data->pos_slide.center = data->numOfPos - 1 - data->pos_slide.width;
+			data->pos_slide.left = data->pos_slide.center - data->pos_slide.width;
+			data->pos_slide.right = data->pos_slide.center + data->pos_slide.width;
+		}
+		else
+		{
+			data->pos_slide.center = data->g_posIndex;
+			data->pos_slide.left = data->pos_slide.center - data->pos_slide.width;
+			data->pos_slide.right = data->pos_slide.center + data->pos_slide.width;
+		}
+		data->slideTimer.finish = 0;
+		data->slideTimer.deltaTime = 0;
+		data->slideTimer.start = gettime();
+	}
+	else//在特写镜头范围内则维护时间
+	{
+		data->slideTimer.finish = gettime();
+		data->slideTimer.deltaTime = data->slideTimer.finish - data->slideTimer.start;
+	}
+}
+
+static int tch_direct_analysis(Tch_Data_t *data)
+{
+	int i = 0;
+	int count = 0;
+	PNode pnode = data->tch_queue->front;
+	Item pitem;
+	for (i = 0; i < data->tch_queue->size; i++)
+	{
+		if (TRACK_OUTSIDE_ANGLE_DN<pnode->data&&pnode->data<TRACK_OUTSIDE_ANGLE_UP)
+		{
+			count++;
+		}
+		pnode = pnode->next;
+	}
+	DeQueue(data->tch_queue, &pitem);
+	return (count >(data->tch_queue->size / 2)) ? 1 : 0;
+}
+
+int tch_track(itc_uchar *src, itc_uchar* pUV, TeaITRACK_Params *params, Tch_Data_t *data, Tch_Result_t *res)
+//int tch_track(IplImage *src, TeaITRACK_Params *params, Tch_Data_t *data, Tch_Result_t *res)
+{
 
 	if (src==NULL || pUV==NULL|| params==NULL || data==NULL || res==NULL)
 	{
 		return -2;
 	}
-	if (data->srcMat->data.ptr == NULL)
-	{
-		return -2;
-	}
 	res->pos = -1;
-	res->status = -1;
+	res->status = RETURN_TRACK_TCH_NULL;
 	int i = 0, j = 0;
-
-#ifdef _WIN32
-	memcpy(data->srcMat->data.ptr, src, data->srcMat->step*data->srcMat->rows);
-#else
-	tchTrack_Copy_matData(data,src);
-#endif
 
 
 	if (data->g_count>0)
@@ -129,10 +270,12 @@ int tch_track(uchar *src, uchar* pUV, TeaITRACK_Params *params, Tch_Data_t *data
 		ITC_SWAP(data->currMatTch, data->prevMatTch, data->tempMatTch);
 		ITC_SWAP(data->currMatBlk, data->prevMatBlk, data->tempMatBlk);
 	}
-	track_copyImage_ROI(data->srcMat, data->currMatTch, data->g_tchWin);
-	track_copyImage_ROI(data->srcMat, data->currMatBlk, data->g_blkWin);
-	/*track_copyImage_ROI(src, data->currMatTch, data->g_tchWin);
-	track_copyImage_ROI(src, data->currMatBlk, data->g_blkWin);*/
+	tchTrack_Copy_matData(data, src, data->g_tchWin, data->g_blkWin);
+
+#ifdef _WIN32
+	tchTrack_drawShow_imgData(data, src, pUV, &data->g_tchWin,&data->red_colour);
+	tchTrack_drawShow_imgData(data, src, pUV, &data->g_blkWin, &data->red_colour);
+#endif
 
 	int s_contourRectTch = 0;//老师的轮廓数目
 	int s_contourRectBlk = 0;//板书的轮廓数目
@@ -141,14 +284,12 @@ int tch_track(uchar *src, uchar* pUV, TeaITRACK_Params *params, Tch_Data_t *data
 	Track_Rect_t s_bigRects[100];//筛选出来的大面积运动物体
 	int s_maxdist = -1;//比较多个面积
 	int s_rectCnt = 0;
-	Track_Colour_t color = colour_RGB2YUV(255, 255, 0);
-	Track_Size_t imgSize = { 480, 264 };
-	
+	int isChange = -1;
 
 	if (data->g_count>0)
 	{
 		data->g_count++;
-		if (data->g_count>50000)
+		if (data->g_count>100000)
 		{
 			data->g_count = 1;
 		}
@@ -174,11 +315,67 @@ int tch_track(uchar *src, uchar* pUV, TeaITRACK_Params *params, Tch_Data_t *data
 				drawRect.y = s_rectsBlk[i].y + data->g_blkWin.y;
 				drawRect.width = s_rectsBlk[i].width;
 				drawRect.height = s_rectsBlk[i].height;
-				//track_draw_rectangle(src, pUV, &imgSize, &drawRect, &color, YUV420_type);
+				tchTrack_drawShow_imgData(data, src, pUV, &drawRect, &data->green_colour);
 			}
 			res->status = RETURN_TRACK_TCH_BLACKBOARD;
-			res->pos = data->g_prevPosIndex;
-			return RETURN_TRACK_TCH_BLACKBOARD;
+			isChange = (res->status != data->tch_lastStatus);
+			data->tch_lastStatus = RETURN_TRACK_TCH_BLACKBOARD;
+			res->pos = data->pos_slide.center;
+			isChange = tch_return_maintain(&data->tch_timer, isChange);
+
+			for (i = 0; i < s_contourRectTch; i++)
+			{
+				if (params->threshold.targetArea < s_rectsTch[i].width*s_rectsTch[i].height)
+				{
+					s_bigRects[s_rectCnt] = s_rectsTch[i];
+					s_rectCnt++;
+				}
+			}
+
+			if (1 == s_rectCnt)
+			{
+				//获取运动方向
+				int direct = -1;
+				direct = tch_calculateDirect_TCH(data->mhiMatTch, s_bigRects[0]);
+				if (direct > -1)
+				{
+					data->center = itcPoint(s_bigRects[0].x + (s_bigRects[0].width >> 1), s_bigRects[0].y + (s_bigRects[0].height >> 1));
+					drawRect.x = s_bigRects[0].x + data->g_tchWin.x;
+					drawRect.y = s_bigRects[0].y + data->g_tchWin.y;
+					drawRect.width = s_bigRects[0].width;
+					drawRect.height = s_bigRects[0].height;
+					tchTrack_drawShow_imgData(data, src, pUV, &drawRect, &data->yellow_colour);
+
+					Tch_CamPosition_t *ptr;
+					ptr = data->cam_pos;
+					//获取当前运动框体所在的预置位
+					for (i = 0; i < data->numOfPos; i++)
+					{
+						if (ptr->left_pixel <= data->center.x&&data->center.x <= ptr->right_pixel)
+						{
+							if (data->g_prevPosIndex == -1)
+							{
+								data->g_prevPosIndex = ptr->index;
+							}
+							data->g_posIndex = ptr->index;
+							break;
+						}
+						ptr++;
+					}
+					ptr = NULL;
+				}
+				if ((abs(data->g_prevPosIndex - data->g_posIndex) > data->pos_slide.width + 1) || (data->center.y > params->threshold.outside))
+				{
+					data->g_posIndex = data->g_prevPosIndex;
+				}
+				else
+				{
+					tch_updatePosition(data);
+					res->pos = data->pos_slide.center;
+				}
+			}
+
+			return isChange;
 		}
 
 		//比较多个Rect之间x坐标的距离
@@ -192,34 +389,45 @@ int tch_track(uchar *src, uchar* pUV, TeaITRACK_Params *params, Tch_Data_t *data
 		}
 		if (0 == s_rectCnt)
 		{
-			if (data->g_prevPosIndex >= 0)
+			if (data->tch_lastStatus == RETURN_TRACK_TCH_MOVEOUTVIEW)
 			{
-				if (data->pos_slide.left <= data->g_prevPosIndex&&data->g_prevPosIndex <= data->pos_slide.right)
+				data->slideTimer.finish = gettime();
+				data->slideTimer.deltaTime = data->slideTimer.finish - data->slideTimer.start;
+				if ((data->slideTimer.deltaTime) > params->threshold.stand)
 				{
-					data->slideTimer.finish = gettime();
-					data->slideTimer.deltaTime = data->slideTimer.finish - data->slideTimer.start;
-					if ((data->slideTimer.deltaTime ) > params->threshold.stand)
-					{
-						if (data->g_isOnStage == 0)
-						{
-							res->status = RETURN_TRACK_TCH_OUTSIDE;
-							res->pos = -1;
-							return RETURN_TRACK_TCH_OUTSIDE;
-						}
-						else
-						{
-							res->status = data->tch_lastStatus;
-							res->pos = data->g_prevPosIndex;
-							return data->tch_lastStatus;//返回特写镜头命令
-						}
-					}
+					res->pos = data->pos_slide.center;
+					res->status = RETURN_TRACK_TCH_MOVEINVIEW;
+					isChange = (res->status != data->tch_lastStatus);
+					data->tch_lastStatus = RETURN_TRACK_TCH_MOVEINVIEW;
+					isChange = tch_return_maintain(&data->tch_timer, isChange);
+					return isChange;
 				}
 				else
 				{
-					data->slideTimer.finish = 0;
-					data->slideTimer.deltaTime = 0;
-					data->slideTimer.start = gettime();
+					res->pos = data->pos_slide.center;
+					res->status = data->tch_lastStatus;
+					isChange = (res->status != data->tch_lastStatus);
+					isChange = tch_return_maintain(&data->tch_timer, isChange);
+					return isChange;
 				}
+			}
+			else if (data->tch_lastStatus == RETURN_TRACK_TCH_MULITY)
+			{
+				data->slideTimer.start = gettime();
+				data->slideTimer.deltaTime = 0;
+				res->pos = data->pos_slide.center;
+				res->status = data->tch_lastStatus;
+				isChange = (res->status != data->tch_lastStatus);
+				isChange = tch_return_maintain(&data->tch_timer, isChange);
+				return isChange;
+			}
+			else
+			{
+				res->pos = data->pos_slide.center;
+				res->status = data->tch_lastStatus;
+				isChange = (res->status != data->tch_lastStatus);
+				isChange = tch_return_maintain(&data->tch_timer, isChange);
+				return isChange;
 			}
 		}
 		else if (s_rectCnt>1)
@@ -227,6 +435,11 @@ int tch_track(uchar *src, uchar* pUV, TeaITRACK_Params *params, Tch_Data_t *data
 			s_maxdist = -1;
 			for (i = 0; i < s_rectCnt; i++)
 			{
+				drawRect.x = s_bigRects[i].x + data->g_tchWin.x;
+				drawRect.y = s_bigRects[i].y + data->g_tchWin.y;
+				drawRect.width = s_bigRects[i].width;
+				drawRect.height = s_bigRects[i].height;
+				tchTrack_drawShow_imgData(data, src, pUV, &drawRect, &data->yellow_colour);
 				for (j = i + 1; j < s_rectCnt; j++)
 				{
 					if (abs(s_bigRects[i].x - s_bigRects[j].x)>s_maxdist)
@@ -237,348 +450,165 @@ int tch_track(uchar *src, uchar* pUV, TeaITRACK_Params *params, Tch_Data_t *data
 						continue;
 				}
 			}
-			if (s_maxdist>data->track_pos_width)
+			if (s_maxdist > data->track_pos_width)
 			{
-				data->g_isMulti = 1;
-				data->tch_lastStatus = RETURN_TRACK_TCH_MULITY;
+				//printf("=========");
+				//data->g_isMulti = 1;
 				res->status = RETURN_TRACK_TCH_MULITY;
+				isChange = (res->status != data->tch_lastStatus);
+				data->tch_lastStatus = RETURN_TRACK_TCH_MULITY;
 				res->pos = -1;
 				data->slideTimer.start = gettime();
-				return RETURN_TRACK_TCH_MULITY;
+				data->slideTimer.deltaTime = 0;
+				isChange = tch_return_maintain(&data->tch_timer, isChange);
+				return isChange;
 			}
 		}
 		else
 		{
-			
-			for (i = 0; i < s_rectCnt; i++)
+			//获取运动方向
+			int direct = -1;
+			//direct = tch_calculateDirect_TCH(data->mhiMatTch, s_bigRects[0]);
+			track_calculateDirect_ROI(data->mhiMatTch, s_bigRects[0], &direct);
+			//printf("角度： %d\r\n", direct);
+			if (direct>-1)
 			{
-				//printf("y: %d, h: %d", s_bigRects[i].y, s_bigRects[i].height);
-				data->g_isMulti = 0;
-				int direct = -1;
-				drawRect.x = s_bigRects[i].x + data->g_tchWin.x;
-				drawRect.y = s_bigRects[i].y + data->g_tchWin.y;
-				drawRect.width = s_rectsTch[i].width;
-				drawRect.height = s_rectsTch[i].height;
-				track_draw_rectangle(src, pUV, &imgSize, &drawRect, &color, YUV420_type);
-				direct = tch_calculateDirect_TCH(data->mhiMatTch, s_rectsTch[i]);
-				if (direct>-1)
+				data->center = itcPoint(s_bigRects[0].x + (s_bigRects[0].width >> 1), s_bigRects[0].y + (s_bigRects[0].height >> 1));
+				drawRect.x = s_bigRects[0].x + data->g_tchWin.x;
+				drawRect.y = s_bigRects[0].y + data->g_tchWin.y;
+				drawRect.width = s_bigRects[0].width;
+				drawRect.height = s_bigRects[0].height;
+				tchTrack_drawShow_imgData(data, src, pUV, &drawRect, &data->yellow_colour);
+				
+				Tch_CamPosition_t *ptr;
+				ptr = data->cam_pos;
+				//获取当前运动框体所在的预置位
+				for (i = 0; i < data->numOfPos; i++)
 				{
-					data->center = itcPoint(s_bigRects[i].x + (s_bigRects[i].width >> 1), s_bigRects[i].y + (s_bigRects[i].height >> 1));
-					data->lastCenter = data->center;
-					Tch_CamPosition_t *ptr;
-					ptr = data->cam_pos;
-					for (j = 0; j < TRACK_NUMOF_POSITION; j++)
+					if (ptr->left_pixel <= data->center.x&&data->center.x <= ptr->right_pixel)
 					{
-						//if (data->tempCams[j].left_pixel <= data->center.x&&data->center.x <= data->tempCams[j].right_pixel)
-						if (ptr->left_pixel<=data->center.x&&data->center.x<=ptr->right_pixel)
+						if (data->g_prevPosIndex==-1)
 						{
-							if (data->g_prevPosIndex==-1)
-							{
-								//data->g_prevPosIndex = data->ptr[j].index;
-								data->g_posIndex = ptr->index;
-								data->g_prevPosIndex = ptr->index;
-							}
-							else
-							{
-								//判断获得的位置和上次位置之间的距离，如果过大的话认为是多目标
-								//data->g_posIndex = data->tempCams[j].index;
-								data->g_posIndex = ptr->index;
-								if (abs(data->g_prevPosIndex - data->g_posIndex)>data->pos_slide.width + 1)
-								{
-									if (data->g_isOnStage == 1)
-									{
-										//tch_pos = &g_prevPosIndex;
-										data->g_posIndex = data->g_prevPosIndex;
-										data->g_isMulti = 1;
-										data->tch_lastStatus = RETURN_TRACK_TCH_MULITY;
-										res->status = RETURN_TRACK_TCH_MULITY;
-										res->pos = data->g_prevPosIndex;
-										ptr = NULL;
-										data->slideTimer.start = gettime();
-										return RETURN_TRACK_TCH_MULITY;
-									}
-									else
-									{
-										//tch_pos = &g_posIndex;
-										res->pos = data->g_posIndex;
-										data->g_prevPosIndex = data->g_posIndex;
-									}
-								}
-								else
-								{
-									//tch_pos = &g_posIndex;
-									res->pos = data->g_posIndex;
-									data->g_prevPosIndex = data->g_posIndex;
-									//g_posIndex = cam_pos[j].index;
-								}
-							}
-
-							if (data->pos_slide.center<0)//当预置位滑框未被使用时
-							{
-								//初始化计时器
-								data->slideTimer.start = gettime();
-								if (data->g_posIndex<data->pos_slide.width)
-								{
-									data->pos_slide.center = data->pos_slide.width;
-									data->pos_slide.left = data->pos_slide.center - data->pos_slide.width;
-									data->pos_slide.right = data->pos_slide.center + data->pos_slide.width;
-								}
-								else if (data->g_posIndex>TRACK_NUMOF_POSITION - 1 - data->pos_slide.width)
-								{
-									data->pos_slide.center = TRACK_NUMOF_POSITION - 1 - data->pos_slide.width;
-									data->pos_slide.left = data->pos_slide.center - data->pos_slide.width;
-									data->pos_slide.right = data->pos_slide.center + data->pos_slide.width;
-								}
-								else
-								{
-									data->pos_slide.center = data->g_posIndex;
-									data->pos_slide.left = data->pos_slide.center - data->pos_slide.width;
-									data->pos_slide.right = data->pos_slide.center + data->pos_slide.width;
-								}
-								break;
-							}
-							else
-							{
-								if (data->g_posIndex == data->pos_slide.right || data->g_posIndex == data->pos_slide.left)//当人物走到滑框的边缘，就更新滑框，相当于调全景移动云台相机
-								{
-									//更新滑框时，计时器置0，重新记时
-									//当目标在最左端和最右端时不要重置计时器
-									if (data->g_posIndex<data->pos_slide.width)
-									{
-										if (data->g_posIndex == 0)
-										{
-											data->slideTimer.finish = gettime();
-											data->slideTimer.deltaTime = data->slideTimer.finish - data->slideTimer.start;
-											if ((data->slideTimer.deltaTime) > params->threshold.stand)
-											{
-												if (data->g_isMulti == 0)//不是多目标
-												{
-													if (data->center.y > params->threshold.outside)//lastCenter
-													{
-														data->g_isOnStage = 0;
-														data->tch_lastStatus = RETURN_TRACK_TCH_OUTSIDE;
-														res->status = RETURN_TRACK_TCH_OUTSIDE;
-														ptr = NULL;
-														return RETURN_TRACK_TCH_OUTSIDE;
-													}
-													else
-													{
-														data->g_isOnStage = 1;
-														data->tch_lastStatus = RETURN_TRACK_TCH_MOVEINVIEW;
-														res->status = RETURN_TRACK_TCH_MOVEINVIEW;
-														ptr = NULL;
-														return RETURN_TRACK_TCH_MOVEINVIEW;//返回全景镜头命令
-													}
-												}
-												else
-												{
-													data->tch_lastStatus = RETURN_TRACK_TCH_MULITY;
-													res->status = RETURN_TRACK_TCH_MULITY;
-													ptr = NULL;
-													data->slideTimer.start = gettime();
-													return RETURN_TRACK_TCH_MULITY;
-												}
-											}
-											else
-											{
-												data->tch_lastStatus = RETURN_TRACK_TCH_MOVEOUTVIEW;
-												res->status = RETURN_TRACK_TCH_MOVEOUTVIEW;
-												ptr = NULL;
-												return RETURN_TRACK_TCH_MOVEOUTVIEW;//返回全景镜头命令
-											}
-										}
-										else
-										{
-											data->slideTimer.finish = 0;
-											data->slideTimer.deltaTime = 0;
-											data->slideTimer.start = gettime();
-										}
-										data->pos_slide.center = data->pos_slide.width;
-										data->pos_slide.left = data->pos_slide.center - data->pos_slide.width;
-										data->pos_slide.right = data->pos_slide.center + data->pos_slide.width;
-									}
-									else if (data->g_posIndex>TRACK_NUMOF_POSITION - 1 - data->pos_slide.width)
-									{
-										if (data->g_posIndex == TRACK_NUMOF_POSITION - 1)
-										{
-											data->slideTimer.finish = gettime();
-											data->slideTimer.deltaTime = data->slideTimer.finish - data->slideTimer.start;
-											if ((data->slideTimer.deltaTime ) > params->threshold.stand)
-											{
-												if (data->g_isMulti == 0)//不是多目标
-												{
-													if (data->lastCenter.y > params->threshold.outside)
-													{
-														data->g_isOnStage = 0;
-														data->tch_lastStatus = RETURN_TRACK_TCH_OUTSIDE;
-														res->status = RETURN_TRACK_TCH_OUTSIDE;
-														ptr = NULL;
-														return RETURN_TRACK_TCH_OUTSIDE;
-													}
-													else
-													{
-														data->g_isOnStage = 1;
-														data->tch_lastStatus = RETURN_TRACK_TCH_MOVEINVIEW;
-														res->status = RETURN_TRACK_TCH_MOVEINVIEW;
-														ptr = NULL;
-														return RETURN_TRACK_TCH_MOVEINVIEW;//返回全景镜头命令
-														
-													}
-												}
-												else
-												{
-													data->tch_lastStatus = RETURN_TRACK_TCH_MULITY;
-													res->status = RETURN_TRACK_TCH_MULITY;
-													res->pos = -1;
-													ptr = NULL;
-													data->slideTimer.start = gettime();
-													return RETURN_TRACK_TCH_MULITY;
-												}
-											}
-											else
-											{
-												data->tch_lastStatus = RETURN_TRACK_TCH_MOVEOUTVIEW;
-												res->status = RETURN_TRACK_TCH_MOVEOUTVIEW;
-												ptr = NULL;
-												return RETURN_TRACK_TCH_MOVEOUTVIEW;//返回全景镜头命令
-											}
-										}
-										else
-										{
-											data->slideTimer.finish = 0;
-											data->slideTimer.deltaTime = 0;
-											data->slideTimer.start = gettime();
-										}
-										data->pos_slide.center = TRACK_NUMOF_POSITION - 1 - data->pos_slide.width;
-										data->pos_slide.left = data->pos_slide.center - data->pos_slide.width;
-										data->pos_slide.right = data->pos_slide.center + data->pos_slide.width;
-									}
-									else
-									{
-										data->pos_slide.center = data->g_posIndex;
-										data->pos_slide.left = data->pos_slide.center - data->pos_slide.width;
-										data->pos_slide.right = data->pos_slide.center + data->pos_slide.width;
-
-										data->slideTimer.finish = 0;
-										data->slideTimer.deltaTime = 0;
-										data->slideTimer.start = gettime();
-									}
-
-									break;
-								}
-								else if (data->pos_slide.left>data->g_posIndex || data->g_posIndex>data->pos_slide.right)//当目标已经出了滑框
-								{
-									//当追踪到的目标已经在上一帧滑框的外面则立刻更新滑框
-									if (data->g_posIndex < data->pos_slide.width)
-									{
-
-										data->slideTimer.finish = 0;
-										data->slideTimer.deltaTime = 0;
-										data->slideTimer.start = gettime();
-
-										data->pos_slide.center = data->pos_slide.width;
-										data->pos_slide.left = data->pos_slide.center - data->pos_slide.width;
-										data->pos_slide.right = data->pos_slide.center + data->pos_slide.width;
-									}
-									else if (data->g_posIndex > TRACK_NUMOF_POSITION - 1 - data->pos_slide.width)
-									{
-
-										data->slideTimer.finish = 0;
-										data->slideTimer.deltaTime = 0;
-										data->slideTimer.start = gettime();
-
-										data->pos_slide.center = TRACK_NUMOF_POSITION - 1 - data->pos_slide.width;
-										data->pos_slide.left = data->pos_slide.center - data->pos_slide.width;
-										data->pos_slide.right = data->pos_slide.center + data->pos_slide.width;
-									}
-									else
-									{
-										data->pos_slide.center = data->g_posIndex;
-										data->pos_slide.left = data->pos_slide.center - data->pos_slide.width;
-										data->pos_slide.right = data->pos_slide.center + data->pos_slide.width;
-
-										data->slideTimer.finish = 0;
-										data->slideTimer.deltaTime = 0;
-										data->slideTimer.start = gettime();
-									}
-									break;
-								}
-								//没有移动到边缘就不更新滑框
-								else
-								{
-									//在这里加入时间计算，到了阈值之后告诉Control该调特写镜头了。
-									data->slideTimer.finish = gettime();
-									data->slideTimer.deltaTime = data->slideTimer.finish - data->slideTimer.start;
-									if ((data->slideTimer.deltaTime ) > params->threshold.stand)
-									{
-										if (data->g_isMulti == 0)//不是多目标
-										{
-											if (data->lastCenter.y>params->threshold.outside)
-											{
-												data->g_isOnStage = 0;
-												data->tch_lastStatus = RETURN_TRACK_TCH_OUTSIDE;
-												res->status = RETURN_TRACK_TCH_OUTSIDE;
-												ptr = NULL;
-												return RETURN_TRACK_TCH_OUTSIDE;
-											}
-											else
-											{
-												data->g_isOnStage = 1;
-												data->tch_lastStatus = RETURN_TRACK_TCH_MOVEINVIEW;
-												res->status = RETURN_TRACK_TCH_MOVEINVIEW;
-												ptr = NULL;
-												return RETURN_TRACK_TCH_MOVEINVIEW;//返回全景镜头命令
-											}
-										}
-										else
-										{
-											data->tch_lastStatus = RETURN_TRACK_TCH_MULITY;
-											res->status = RETURN_TRACK_TCH_MULITY;
-											res->pos = -1;
-											ptr = NULL;
-											data->slideTimer.start = gettime();
-											return RETURN_TRACK_TCH_MULITY;
-										}
-									}
-									else
-									{
-										data->tch_lastStatus = RETURN_TRACK_TCH_MOVEOUTVIEW;
-										res->status = RETURN_TRACK_TCH_MOVEOUTVIEW;
-										ptr = NULL;
-										return RETURN_TRACK_TCH_MOVEOUTVIEW;//返回全景镜头命令
-									}
-									break;
-								}
-							}
+							data->g_prevPosIndex = ptr->index;
 						}
-						ptr++;
+						data->g_posIndex = ptr->index;
+						break;
+					}
+					ptr++;
+				}
+				ptr = NULL;
+
+				
+				//printf("x: %d,  y:  %d\r\n", pos_1.x,pos_1.y);
+				//如果获取的位置与上一次位置相差很大，则认为是多目标
+				//printf("last position:%d,   current position:%d\r\n", data->g_prevPosIndex, data->g_posIndex);
+				if (abs(data->g_prevPosIndex - data->g_posIndex) > data->pos_slide.width + 1)
+				{
+					//data->g_isMulti = 1;
+					data->g_posIndex = data->g_prevPosIndex;//maintain the last position
+					//data->g_prevPosIndex = data->g_posIndex;
+					res->status = RETURN_TRACK_TCH_MULITY;
+					isChange = (res->status != data->tch_lastStatus);
+					data->tch_lastStatus = RETURN_TRACK_TCH_MULITY;
+					res->pos = data->pos_slide.center;
+					data->tch_lastStatus = RETURN_TRACK_TCH_MULITY;
+					data->slideTimer.deltaTime = 0;
+					data->slideTimer.start = gettime();
+					isChange = tch_return_maintain(&data->tch_timer, isChange);
+					return isChange;
+				}
+
+				//如果运动框体低于一定阈值，则认为走下讲台
+				if (data->center.y > params->threshold.outside)
+				{
+					//如果上一次结果为多目标则认为是讲台上还剩一个人
+					if (data->tch_lastStatus == RETURN_TRACK_TCH_MULITY)
+					{
+						res->status = RETURN_TRACK_TCH_MOVEOUTVIEW;
+						isChange = (res->status != data->tch_lastStatus);
+						data->tch_lastStatus = RETURN_TRACK_TCH_MOVEOUTVIEW;
+						isChange = tch_return_maintain(&data->tch_timer, isChange);
+						return isChange;
+					}
+					else
+					{
+						if (data->tch_queue->size < TRACK_FRAMES_ANALYSIS-2)
+						{
+							EnQueue(data->tch_queue, direct);
+							res->status = data->tch_lastStatus;
+							isChange = (res->status != data->tch_lastStatus);
+							isChange = tch_return_maintain(&data->tch_timer, isChange);
+							return isChange;
+						}
+						else
+						{
+							EnQueue(data->tch_queue, direct);
+							if (tch_direct_analysis(data))
+							{
+								res->status = RETURN_TRACK_TCH_OUTSIDE;
+								isChange = (res->status != data->tch_lastStatus);
+								data->tch_lastStatus = RETURN_TRACK_TCH_OUTSIDE;
+								res->pos = -1;
+								data->g_posIndex = -1;
+								data->g_prevPosIndex = -1;
+								data->tch_lastStatus = RETURN_TRACK_TCH_OUTSIDE;
+								isChange = tch_return_maintain(&data->tch_timer, isChange);
+								return isChange;
+							}
+							else
+							{
+								res->status = data->tch_lastStatus;
+								isChange = (res->status != data->tch_lastStatus);
+								isChange = tch_return_maintain(&data->tch_timer, isChange);
+								return isChange;
+							}
+							
+						}
+						/*res->status = RETURN_TRACK_TCH_OUTSIDE;
+						isChange = (res->status != data->tch_lastStatus);
+						data->tch_lastStatus = RETURN_TRACK_TCH_OUTSIDE;
+						res->pos = -1;
+						data->g_posIndex = -1;
+						data->g_prevPosIndex = -1;
+						data->tch_lastStatus = RETURN_TRACK_TCH_OUTSIDE;
+						isChange = tch_return_maintain(&data->tch_timer, isChange);
+						return isChange;*/
 					}
 				}
-			}
-		}
-		//tch_pos = &g_prevPosIndex;
-		if (data->tch_lastStatus==3)
-		{
-			data->slideTimer.finish = gettime();
-			data->slideTimer.deltaTime = data->slideTimer.finish - data->slideTimer.start;
-			if ((data->slideTimer.deltaTime ) > params->threshold.stand)
-			{
-				res->status = RETURN_TRACK_TCH_MOVEINVIEW;
-				res->pos = data->g_prevPosIndex;
+
+				tch_updatePosition(data);
+
+				if ((data->slideTimer.deltaTime) > params->threshold.stand)
+				{
+					res->status = RETURN_TRACK_TCH_MOVEINVIEW;
+					isChange = (res->status != data->tch_lastStatus);
+					data->tch_lastStatus = RETURN_TRACK_TCH_MOVEINVIEW;
+					res->pos = data->pos_slide.center;
+					isChange = tch_return_maintain(&data->tch_timer, isChange);
+					return isChange;
+				}
+				else
+				{
+					if (data->tch_lastStatus==RETURN_TRACK_TCH_OUTSIDE)
+					{
+						ClearQueue(data->tch_queue);
+					}
+					res->status = RETURN_TRACK_TCH_MOVEOUTVIEW;
+					isChange = (res->status != data->tch_lastStatus);
+					data->tch_lastStatus = RETURN_TRACK_TCH_MOVEOUTVIEW;
+					res->pos = data->pos_slide.center;
+					isChange = tch_return_maintain(&data->tch_timer, isChange);
+					return isChange;
+				}
 			}
 			else
 			{
-				res->status = data->tch_lastStatus;
-				res->pos = data->g_prevPosIndex;
-			}
+				isChange = (res->status != data->tch_lastStatus);
+				data->tch_lastStatus = res->status;
+				isChange = tch_return_maintain(&data->tch_timer, isChange);
+				return isChange;
+			}	
 		}
-		else
-		{
-			res->status = data->tch_lastStatus;
-			res->pos = data->g_prevPosIndex;
-		}
-		
-		return data->tch_lastStatus;
 	}
 	else
 	{
@@ -586,10 +616,20 @@ int tch_track(uchar *src, uchar* pUV, TeaITRACK_Params *params, Tch_Data_t *data
 		{
 			return -2;
 		}
+		if (data->g_count==0)
+		{
+			data->tch_timer.start = gettime();
+		}
 		data->g_count++;
-		return 0;
+		isChange = (res->status != data->tch_lastStatus);
+		data->tch_lastStatus = res->status;
+		isChange = tch_return_maintain(&data->tch_timer, isChange);
+		return isChange;
 	}
-	return 0;
+	isChange = (res->status != data->tch_lastStatus);
+	data->tch_lastStatus = res->status;
+	isChange = tch_return_maintain(&data->tch_timer, isChange);
+	return isChange;
 }
 
 int tch_calculateDirect_TCH(Itc_Mat_t* src, Track_Rect_t roi)
@@ -654,19 +694,27 @@ int tch_calculateDirect_TCH(Itc_Mat_t* src, Track_Rect_t roi)
 
 void tch_trackDestroy(Tch_Data_t *data)
 {
-	itcReleaseMemStorage(&data->storageTch);
-	itcReleaseMemStorage(&data->storageBlk);
-	itcReleaseMemStorage(&data->storage);
+	if (data->g_flag >= 0)
+	{
+		itcReleaseMemStorage(&data->storageTch);
+		itcReleaseMemStorage(&data->storageBlk);
+		itcReleaseMemStorage(&data->storage);
 
-	itc_release_mat(&data->currMatTch);
-	itc_release_mat(&data->prevMatTch);
-	itc_release_mat(&data->mhiMatTch);
-	itc_release_mat(&data->maskMatTch);
+		itc_release_mat(&data->currMatTch);
+		itc_release_mat(&data->prevMatTch);
+		itc_release_mat(&data->mhiMatTch);
+		itc_release_mat(&data->maskMatTch);
 
-	itc_release_mat(&data->currMatBlk);
-	itc_release_mat(&data->prevMatBlk);
-	itc_release_mat(&data->mhiMatBlk);
-	itc_release_mat(&data->maskMatBlk);
+		itc_release_mat(&data->currMatBlk);
+		itc_release_mat(&data->prevMatBlk);
+		itc_release_mat(&data->mhiMatBlk);
+		itc_release_mat(&data->maskMatBlk);
+
+		DestroyQueue(data->tch_queue);
+	}
+	else
+		return;
+	
 }
 
 int tch_Init(TeaITRACK_Params *params, Tch_Data_t *data)
@@ -676,6 +724,9 @@ int tch_Init(TeaITRACK_Params *params, Tch_Data_t *data)
 		data->sysData.callbackmsg_func("params err.");
 		return -1;
 	}
+
+	tch_trackDestroy(data);
+
 	if (params->isSetParams==0)
 	{
 		params->frame.width = TRACK_DEFAULT_WIDTH;
@@ -780,5 +831,14 @@ int tch_Init(TeaITRACK_Params *params, Tch_Data_t *data)
 	{
 		return -1;
 	}
+
+	//初始化绘制颜色
+	data->pink_colour = colour_RGB2YUV(255, 0, 255);	/*粉红*/
+	data->blue_colour = colour_RGB2YUV(0, 0, 255);		/*纯蓝*/
+	data->lilac_colour = colour_RGB2YUV(155, 155, 255);/*淡紫*/
+	data->green_colour = colour_RGB2YUV(0, 255, 0);	/*纯绿*/
+	data->red_colour = colour_RGB2YUV(255, 0, 0);		/*纯红*/
+	data->dullred_colour = colour_RGB2YUV(127, 0, 0);	/*暗红*/
+	data->yellow_colour = colour_RGB2YUV(255, 255, 0);	/*纯黄*/
 	return 0;
 }

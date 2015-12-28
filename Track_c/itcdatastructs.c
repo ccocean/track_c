@@ -1,8 +1,11 @@
-//#pragma once
 #include "itcdatastructs.h"
+#include <stdio.h>
+#include <assert.h>
+#include <stdlib.h>
+#include <string.h>
 
-static void* itcDefaultAlloc(size_t size, void* argument);
-static int itcDefaultFree(void* ptr, void* argument);
+static void* itcDefaultAlloc(itc_size_t size);
+static int itcDefaultFree(void* ptr);
 static void itcInitMemStorage(Track_MemStorage_t* storage, int block_size);
 static void itcDestroyMemStorage(Track_MemStorage_t* storage);
 static void itcGoNextMemBlock(Track_MemStorage_t * storage);
@@ -10,7 +13,6 @@ static void itcGrowSeq(Track_Seq_t *seq, int in_front_of);
 static void itcFreeSeqBlock(Track_Seq_t *seq, int in_front_of);
 
 // pointers to allocation functions, initially set to default
-static void* p_cvAllocUserData = 0;
 
 inline int  itcAlign(int size, int align)
 {
@@ -19,10 +21,10 @@ inline int  itcAlign(int size, int align)
 }
 
 inline void* itcAlignPtr( const void* ptr, int align )
-{
+{	
 	//align = 32;
 	assert( (align & (align-1)) == 0 );
-	return (void*)( ((size_t)ptr + align - 1) & ~(size_t)(align-1) );
+	return (void*)(((itc_size_t)ptr + align - 1) & ~(itc_size_t)(align - 1));
 }
 
 inline int
@@ -31,15 +33,12 @@ inline int
 	return size & -align;
 }
 
-
-
-// default <malloc>
 static void*
-	itcDefaultAlloc( size_t size, void*  argument)
+itcDefaultAlloc(itc_size_t size)
 {
 	//多申请的内存是为了维护内存，这是因为在某些架构上，只有被指定的数（如4,16）整除的地址才能访问，否则会crash或出错和程序变慢
 	char *ptr, *ptr0 = (char*)malloc(
-		(size_t)(size + ITC_MALLOC_ALIGN*((size >= 4096) + 1) + sizeof(char*)));   //多申请了 ITC_MALLOC_ALIGN*((size >= 4096) + 1) + sizeof(char*)大小的内存
+		(itc_size_t)(size + ITC_MALLOC_ALIGN*((size >= 4096) + 1) + sizeof(char*)));   //多申请了 ITC_MALLOC_ALIGN*((size >= 4096) + 1) + sizeof(char*)大小的内存
 																				   //前者是为了对齐而预留的空间，后者为保存一个指向这片空白空间的指针
 																				   //ITC_MALLOC_ALIGN这里是32， 表示实际存储数据的首地址是32的倍数
 																				   //多申请的sizeof(char*)是用来存储malloc返回的内存首地址，以便在DefaultFree中被正确释放
@@ -57,10 +56,10 @@ static void*
 
 // default <free>
 static int
-	itcDefaultFree( void* ptr, void* argument)
+	itcDefaultFree( void* ptr)
 {
 	// Pointer must be aligned by CV_MALLOC_ALIGN
-	if( ((size_t)ptr & (ITC_MALLOC_ALIGN-1)) != 0 )		//将指针对齐到之前多分配的(char*)位置以释放内存
+		if (((itc_size_t)ptr & (ITC_MALLOC_ALIGN - 1)) != 0)		//将指针对齐到之前多分配的(char*)位置以释放内存
 		return ITC_BADARG_ERR;
 	free( *((char**)ptr - 1) );		//	*((char**)ptr-1)为之前多分配内存的指针，用free函数来释放它
 
@@ -70,7 +69,7 @@ static int
 // pointers to allocation functions, initially set to default
 //static CvAllocFunc p_cvAlloc = icvDefaultAlloc;
 
-void*  itcAlloc( size_t size )
+void*  itcAlloc(itc_size_t size)
 {
 	void* ptr = 0;
 
@@ -78,10 +77,10 @@ void*  itcAlloc( size_t size )
 
 	__BEGIN__;
 
-	if ((size_t)size > ITC_MAX_ALLOC_SIZE)
+	if ((itc_size_t)size > ITC_MAX_ALLOC_SIZE)
 		ITC_ERROR_DETAIL(ITC_StsOutOfRange, "");
 
-	ptr = itcDefaultAlloc( size, p_cvAllocUserData );
+	ptr = itcDefaultAlloc( size );
 	if( !ptr )
 		ITC_ERROR_DETAIL(ITC_StsNoMem,"");
 
@@ -98,7 +97,7 @@ void  itcFree_( void* ptr )
 
 	if( ptr )
 	{
-		int status = itcDefaultFree( ptr, p_cvAllocUserData );
+		int status = itcDefaultFree( ptr);
 		if (status < 0)
 			printf("Deallocation error\n");
 	}
@@ -429,7 +428,7 @@ itcRestoreMemStoragePos( Track_MemStorage_t * storage, Track_MemStoragePos_t * p
 	该方法是在已分配的storage的top后添加size大小的空间
 */
 void*
-	itcMemStorageAlloc( Track_MemStorage_t* storage, size_t size )
+itcMemStorageAlloc(Track_MemStorage_t* storage, itc_size_t size)
 {
 	char *ptr = 0;
 
@@ -447,9 +446,9 @@ void*
 
 	assert( storage->free_space % ITC_STRUCT_ALIGN == 0 );
 
-	if( (size_t)storage->free_space < size )
+	if ((itc_size_t)storage->free_space < size)
 	{
-		size_t max_free_space = itcAlignLeft(storage->block_size - sizeof(Track_MemBlock_t), ITC_STRUCT_ALIGN);// 计算对齐后的剩余空间最多能够有多大
+		itc_size_t max_free_space = itcAlignLeft(storage->block_size - sizeof(Track_MemBlock_t), ITC_STRUCT_ALIGN);// 计算对齐后的剩余空间最多能够有多大
 		if (max_free_space < size)// 如果要分配的空间很大或者参数错误是个负数
 			//CV_ERROR( CV_StsOutOfRange, "requested size is negative or too big" );
 			ITC_ERROR_DETAIL(ITC_StsOutOfRange, "requested size is negative or too big");
@@ -459,7 +458,7 @@ void*
 	}
 
 	ptr = ITC_FREE_PTR(storage);// 宏函数找到当前free space的首地址
-	assert( (size_t)ptr % ITC_STRUCT_ALIGN == 0 );
+	assert((itc_size_t)ptr % ITC_STRUCT_ALIGN == 0);
 	storage->free_space = itcAlignLeft(storage->free_space - (int)size, ITC_STRUCT_ALIGN );//不需要再做内存分配，只要更新free_space即可
 
 	__END__;
@@ -649,9 +648,9 @@ int
 			if( _block )
 				*_block = block;
 			if( elem_size <= ITC_SHIFT_TAB_MAX && (id = itcPower2ShiftTab[elem_size - 1]) >= 0 )
-				id = (int)((size_t)(element - block->data) >> id);
+				id = (int)((itc_size_t)(element - block->data) >> id);
 			else
-				id = (int)((size_t)(element - block->data) / elem_size);
+				id = (int)((itc_size_t)(element - block->data) / elem_size);
 			id += block->start_index - seq->first->start_index;
 			break;
 		}
@@ -679,7 +678,7 @@ char*
 	itcSeqPush( Track_Seq_t *seq, void *element )
 {
 	char *ptr = 0;
-	size_t elem_size;
+	itc_size_t elem_size;
 
 	//CV_FUNCNAME( "cvSeqPush" );
 

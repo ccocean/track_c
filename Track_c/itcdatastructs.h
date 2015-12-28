@@ -3,11 +3,10 @@
 
 #include "itcerror.h"
 #include "itctype.h"
-#include <assert.h>
-#include <string.h>
-//#include <stdlib.h>
-//#include <stdio.h>
-//#include <ctype.h>
+
+#ifdef  __cplusplus
+extern "C" {
+#endif
 
 #ifdef _WIN32
 #define inline _inline
@@ -432,9 +431,6 @@ Track_LinkedRunPoint_t;
 
 typedef Track_Contour_t Track_Point2DSeq_t;
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 /****************************************************************************************/
 /*                                   declaration                                        */
 /****************************************************************************************/
@@ -459,7 +455,7 @@ inline void* itcAlignPtr(const void* ptr, int align);
 inline int itcAlignLeft(int size, int align);
 //static void* itcDefaultAlloc(size_t size, void* argument);
 //static int itcDefaultFree(void* ptr, void* argument);
-void*  itcAlloc(size_t size);
+void*  itcAlloc(itc_size_t size);
 void  itcFree_(void* ptr);
 //static void itcInitMemStorage(Track_MemStorage_t* storage, int block_size);
 Track_MemStorage_t* itcCreateMemStorage(int block_size);
@@ -470,7 +466,7 @@ void itcClearMemStorage(Track_MemStorage_t * storage);
 //static void itcGoNextMemBlock(Track_MemStorage_t * storage);
 void itcSaveMemStoragePos(const Track_MemStorage_t * storage, Track_MemStoragePos_t * pos);
 void itcRestoreMemStoragePos(Track_MemStorage_t * storage, Track_MemStoragePos_t * pos);
-void* itcMemStorageAlloc(Track_MemStorage_t* storage, size_t size);
+void* itcMemStorageAlloc(Track_MemStorage_t* storage, itc_size_t size);
 Track_Seq_t *itcCreateSeq(int seq_flags, int header_size, int elem_size, Track_MemStorage_t * storage);
 void itcSetSeqBlockSize(Track_Seq_t *seq, int delta_elements);
 int itcSeqElemIdx(const Track_Seq_t* seq, const void* _element, Track_SeqBlock_t** _block);

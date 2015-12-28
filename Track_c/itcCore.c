@@ -14,7 +14,7 @@ Itc_Mat_t itc_mat( int rows, int cols, int type, void* data)
 	m.cols = cols;
 	m.rows = rows;
 	m.step = m.cols*ITC_ELEM_SIZE(type);
-	m.data.ptr = (uchar*)data;
+	m.data.ptr = (itc_uchar*)data;
 	m.refcount = NULL;
 	m.hdr_refcount = 0;
 
@@ -29,9 +29,9 @@ Itc_Mat_t*	itc_create_mat( int height, int width, int type )
 		itc_release_mat(&arr);
 		return NULL;
 	}
-	size_t step, total_size;
+	itc_size_t step, total_size;
 	Itc_Mat_t* mat = (Itc_Mat_t*)arr;
-	int64 _total_size;
+	itc_int64 _total_size;
 	step = mat->step;
 	
 	if( mat->rows == 0 || mat->cols == 0 )
@@ -45,24 +45,24 @@ Itc_Mat_t*	itc_create_mat( int height, int width, int type )
 	if( step == 0 )
 		step = ITC_ELEM_SIZE(mat->type)*mat->cols;
 
-	_total_size = (int64)step*mat->rows + sizeof(int)+ITC_MALLOC_ALIGN;	//int是用于保存统计计数的，ITC_MALLOC_ALIGN用与内存的对齐
-	total_size = (size_t)_total_size;				//根据系统不同，用size_t类型截取本系统能分配的空间大小
-	if (_total_size != (int64)total_size)			//如果不相等，说明已经溢出
+	_total_size = (itc_int64)step*mat->rows + sizeof(int)+ITC_MALLOC_ALIGN;	//int是用于保存统计计数的，ITC_MALLOC_ALIGN用与内存的对齐
+	total_size = (itc_size_t)_total_size;				//根据系统不同，用size_t类型截取本系统能分配的空间大小
+	if (_total_size != (itc_int64)total_size)			//如果不相等，说明已经溢出
 	{
 		ITC_ERROR_("Too big buffer is allocated");	//分配的空间超出当前系统的寻址范围}
 		itc_release_mat(&arr);
 		return arr;
 	}
 
-	mat->refcount = (int*)itcAlloc((size_t)total_size);
+	mat->refcount = (int*)itcAlloc((itc_size_t)total_size);
 	if (mat->refcount == NULL)
 	{
 		itc_release_mat(&arr);
 		return NULL;
 	}
-	memset(mat->refcount, 0, (size_t)total_size);	//初始化为0
-	mat->data.ptr = (uchar*)( mat->refcount + 1);
-	mat->data.ptr = (uchar*)(((size_t)mat->data.ptr + ITC_MALLOC_ALIGN - 1) &~ (size_t)(ITC_MALLOC_ALIGN - 1));//对齐到ITC_MALLOC_ALIGN整数位，比如说地址是110，ITC_MALLOC_ALIGN=16，那么就把地址对齐到112，如果地址是120，那么就对齐到128，
+	memset(mat->refcount, 0, (itc_size_t)total_size);	//初始化为0
+	mat->data.ptr = (itc_uchar*)(mat->refcount + 1);
+	mat->data.ptr = (itc_uchar*)(((itc_size_t)mat->data.ptr + ITC_MALLOC_ALIGN - 1) &~(itc_size_t)(ITC_MALLOC_ALIGN - 1));//对齐到ITC_MALLOC_ALIGN整数位，比如说地址是110，ITC_MALLOC_ALIGN=16，那么就把地址对齐到112，如果地址是120，那么就对齐到128，
 	*mat->refcount = 1;
 
 	return arr;
@@ -72,7 +72,7 @@ Itc_Mat_t*	itc_create_mat( int height, int width, int type )
 static void iicvCheckHuge( Itc_Mat_t* pMat )
 {
 	//检查需要分配的空间是否过大
-	if ((int64)pMat->step*pMat->rows > INT_MAX)	//不超出最大分配大小
+	if ((itc_int64)pMat->step*pMat->rows > INT_MAX)	//不超出最大分配大小
 		pMat->type &= ~ITC_MAT_CONT_FLAG;		//设置为不连续
 }
 
@@ -121,7 +121,7 @@ Itc_Mat_t*	itc_init_matHeader( Itc_Mat_t* arr, int rows, int cols, int type, voi
 	arr->type = type | ITC_MAT_MAGIC_VAL;
 	arr->rows = rows;
 	arr->cols = cols;
-	arr->data.ptr = (uchar*)data;
+	arr->data.ptr = (itc_uchar*)data;
 	arr->refcount = 0;
 	arr->hdr_refcount = 0;
 
@@ -163,8 +163,8 @@ void itc_release_mat(Itc_Mat_t** arr)
 
 #define ICV_DEF_BIN_ARI_OP_2D( __op__, name, type, worktype, cast_macro )   \
 	static void  name													    \
-	(uchar* src1, int step1, uchar* src2, int step2,						\
-	uchar* dst, int dstep, Track_Size_t size)								\
+	(itc_uchar* src1, int step1, itc_uchar* src2, int step2, \
+	itc_uchar* dst, int dstep, Track_Size_t size)								\
 {                                                                           \
 	int i = 0;																\
 	int j = 0;																\
@@ -189,9 +189,9 @@ void itc_release_mat(Itc_Mat_t** arr)
 
 //__op__是操作类型，
 #define ICV_DEF_BIN_ARI_ALL( __op__, name )											\
-	ICV_DEF_BIN_ARI_OP_2D(__op__, icv##name##_8u_C1R, uchar, int, ITC_CAST_8U)		\
+	ICV_DEF_BIN_ARI_OP_2D(__op__, icv##name##_8u_C1R, itc_uchar, int, ITC_CAST_8U)	\
 	ICV_DEF_BIN_ARI_OP_2D(__op__, icv##name##_8s_C1R, char, int, ITC_CAST_8S)		\
-	ICV_DEF_BIN_ARI_OP_2D(__op__, icv##name##_16u_C1R, ushort, int, ITC_CAST_16U)	\
+	ICV_DEF_BIN_ARI_OP_2D(__op__, icv##name##_16u_C1R, itc_ushort, int, ITC_CAST_16U)\
 	ICV_DEF_BIN_ARI_OP_2D(__op__, icv##name##_16s_C1R, short, int, ITC_CAST_16S)	\
 	ICV_DEF_BIN_ARI_OP_2D(__op__, icv##name##_32s_C1R, int, int, ITC_CAST_32S)		\
 	ICV_DEF_BIN_ARI_OP_2D(__op__, icv##name##_32f_C1R, float, float, ITC_CAST_32F)	\
@@ -267,9 +267,9 @@ void track_update_MHI(Itc_Mat_t* src1, Itc_Mat_t* src2, Itc_Mat_t* mhi, int diff
 
 	int i = 0;
 	int j = 0;
-	uchar *qsrc1 = src1->data.ptr;
-	uchar *qsrc2 = src2->data.ptr;
-	uchar *qmhi = mhi->data.ptr;
+	itc_uchar *qsrc1 = src1->data.ptr;
+	itc_uchar *qsrc2 = src2->data.ptr;
+	itc_uchar *qmhi = mhi->data.ptr;
 	if (maskT == NULL)
 	{
 		for (i = 0; i < sizeMat.height; i++)
@@ -296,7 +296,7 @@ void track_update_MHI(Itc_Mat_t* src1, Itc_Mat_t* src2, Itc_Mat_t* mhi, int diff
 	}
 	else
 	{
-		uchar *qmask = maskT->data.ptr;
+		itc_uchar *qmask = maskT->data.ptr;
 		//生成掩码要使四周边界都为0，用于进行轮廓检测
 		qsrc1 += src1->step;
 		qsrc2 += src2->step;
@@ -618,12 +618,16 @@ int track_filtrate_contours(Track_Contour_t** pContour, int size_Threshold, Trac
 	int i = 0, j = 0;
 	for (i = 0; i < count_rect; i++)
 	{
-		for (j = i + 1; j < count_rect; j++)
+		for (j = 0; j < count_rect; j++)
 		{
-			if (track_intersect_rect(rect_arr + i, rect_arr + j,0))		//判断是否相交，如果相交则直接合并
+			if (i!=j)
 			{
-				count_rect--;
-				*(rect_arr + j) = *(rect_arr + count_rect);
+				if (track_intersect_rect(rect_arr + i, rect_arr + j, 1))		//判断是否相交，如果相交则直接合并
+				{
+					count_rect--;
+					*(rect_arr + j) = *(rect_arr + count_rect);
+					j--;
+				}
 			}
 		}
 	}
@@ -732,11 +736,11 @@ int track_calculateDirect_ROI(Itc_Mat_t* mhi, Track_Rect_t roi, int *direct)
 
 	int flag_signLase = 0;			//用于标记当前是上升还是下降
 	int flag_signCurr = 0;
-	uchar last_Value = 0;
+	itc_uchar last_Value = 0;
 	int startY = y1 - 1;
 	int startX = x1 - 1;
-	uchar *img0 = (uchar*)(mhi->data.ptr + step*y1);
-	uchar *img1 = img0;
+	itc_uchar *img0 = (itc_uchar*)(mhi->data.ptr + step*y1);
+	itc_uchar *img1 = img0;
 	
 	int sign_Value = 0;		//用于标示两次方向是否相等
 	int k_int_enhance = 1 << (ITC_FIXEDPOINT_ALIGN - 2);	//用于提高除法精度
@@ -989,8 +993,8 @@ void track_update_midValueBK(Itc_Mat_t* mat, Itc_Mat_t* matBK)
 
 	int i = 0;
 	int j = 0;
-	uchar *qmat = mat->data.ptr;
-	uchar *qmBK = matBK->data.ptr;
+	itc_uchar *qmat = mat->data.ptr;
+	itc_uchar *qmBK = matBK->data.ptr;
 
 	for (i = 0; i < sizeMat.height; i++)
 	{
@@ -1033,8 +1037,8 @@ int track_copyImage_ROI(Itc_Mat_t* src, Itc_Mat_t* dst, Track_Rect_t roi)
 
 	int step = roi.width;
 
-	uchar *img = (uchar*)(src->data.ptr + y1*src->step + x1);
-	uchar *img0 = (uchar*)(dst->data.ptr);
+	itc_uchar *img = (itc_uchar*)(src->data.ptr + y1*src->step + x1);
+	itc_uchar *img0 = (itc_uchar*)(dst->data.ptr);
 
 	for (i = y1; i < y2; i++)
 	{
@@ -1052,7 +1056,7 @@ int track_copyImage_ROI(Itc_Mat_t* src, Itc_Mat_t* dst, Track_Rect_t roi)
 	}
 }
 
-BOOL track_resize_matData(uchar* srcData, Track_Size_t *ssize, char* dstData, Track_Size_t *dsize)
+BOOL track_resize_matData(itc_uchar* srcData, Track_Size_t *ssize, char* dstData, Track_Size_t *dsize)
 {
 	if (srcData == NULL || ssize==NULL
 		|| dstData == NULL || dsize == NULL)
@@ -1083,14 +1087,14 @@ BOOL track_resize_matData(uchar* srcData, Track_Size_t *ssize, char* dstData, Tr
 	int x_count = dsize->width - 2;
 	for (y = 0; y < dsize->height; y++, dstData += dsize->width)
 	{
-		const uchar* tsrc;
+		const itc_uchar* tsrc;
 		t = (sheight2*y + minHeight) / dheight2;
 		t -= t >= ssize->height;
 		tsrc = srcData + ssize->width*t;
 		for (x = 0; x <= x_count; x += 2)
 		{
-			uchar t0 = tsrc[x_ofs[x]];
-			uchar t1 = tsrc[x_ofs[x + 1]];
+			itc_uchar t0 = tsrc[x_ofs[x]];
+			itc_uchar t1 = tsrc[x_ofs[x + 1]];
 
 			dstData[x] = t0;
 			dstData[x + 1] = t1;

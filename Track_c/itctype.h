@@ -20,20 +20,23 @@ extern "C" {
 #define TRUE 1
 #endif // !FALSE
 
-typedef int BOOL;
-typedef unsigned int size_t;
-typedef signed long long int64;
-typedef unsigned long long uint64;
+typedef int itc_BOOL;
+typedef unsigned int itc_size_t;
+typedef signed long long itc_int64;
+typedef unsigned long long itc_uint64;
 
-typedef unsigned char uchar;
-typedef unsigned short ushort;
+typedef unsigned char itc_uchar;
+typedef unsigned short itc_ushort;
 
-#define FLT_EPSILON			1.192092896e-07F
-#define DBL_EPSILON			2.2204460492503131e-016
+
+#define ITC_FLT_EPSILON			1.192092896e-07F
+#define ITC_DBL_EPSILON			2.2204460492503131e-016
+
 #define ITC_180DEGREE			180
 #define ITC_360DEGREE			360
 #define ITC_PI				3.1415926535897932384626433832795
 #define ITC_RADIAN_TO_ANGLE	57.29577951308
+#define ITC_ANGLE_TO_RADIAN	0.017453292520
 #define ITC_LOG2			0.69314718055994530941723212145818
 #define ITC_FIXEDPOINT_ALIGN	10
 
@@ -167,15 +170,15 @@ typedef unsigned short ushort;
 	(((mat)->height | (mat)->width) == 1)
 
 #define ITC_ELEM_SIZE(type) \
-	(ITC_MAT_CN(type) << ((((sizeof(size_t) / 4 + 1) * 0x4000 | 0x3a50) >> ITC_MAT_DEPTH(type) * 2) & 3))	//每一个元素有n个通道，每个通道占s个字节，那么一个元素的大小就为n*s,其中s的取值为1，2，4，8，用位操作《取代*则为0，1，2，3
+	(ITC_MAT_CN(type) << ((((sizeof(itc_size_t) / 4 + 1) * 0x4000 | 0x3a50) >> ITC_MAT_DEPTH(type) * 2) & 3))	//每一个元素有n个通道，每个通道占s个字节，那么一个元素的大小就为n*s,其中s的取值为1，2，4，8，用位操作《取代*则为0，1，2，3
 //0x3a50中，每两个位对应一个深度的s,最高两位对应ITC_USRTYPE1，size_t只对最高两位产生影响（因为0x4000）
 /* general-purpose saturation macros */
-#define  ITC_CAST_8U(t)  (uchar)(!((t) & ~255) ? (t) : (t) > 0 ? 255 : 0)						//((t) & ~255)不为0说明已经越界
+#define  ITC_CAST_8U(t)  (itc_uchar)(!((t) & ~255) ? (t) : (t) > 0 ? 255 : 0)						//((t) & ~255)不为0说明已经越界
 #define  ITC_CAST_8S(t)  (char)(!(((t)+128) & ~255) ? (t) : (t) > 0 ? 127 : -128)
-#define  ITC_CAST_16U(t) (ushort)(!((t) & ~65535) ? (t) : (t) > 0 ? 65535 : 0)
+#define  ITC_CAST_16U(t) (itc_ushort)(!((t) & ~65535) ? (t) : (t) > 0 ? 65535 : 0)
 #define  ITC_CAST_16S(t) (short)(!(((t)+32768) & ~65535) ? (t) : (t) > 0 ? 32767 : -32768)
 #define  ITC_CAST_32S(t) (int)(t)
-#define  ITC_CAST_64S(t) (int64)(t)
+#define  ITC_CAST_64S(t) (itc_int64)(t)
 #define  ITC_CAST_32F(t) (float)(t)
 #define  ITC_CAST_64F(t) (double)(t)
 
@@ -187,7 +190,7 @@ typedef unsigned short ushort;
 
 /* maximum size of dynamic memory buffer.
 cvAlloc reports an error if a larger block is requested. */
-#define  ITC_MAX_ALLOC_SIZE    (((size_t)1 << (sizeof(size_t)*8-2)))  //判断是否越界
+#define  ITC_MAX_ALLOC_SIZE    (((itc_size_t)1 << (sizeof(itc_size_t)*8-2)))  //判断是否越界
 /* the alignment of all the allocated buffers */
 #define  ITC_MALLOC_ALIGN    32
 /* default storage block size */
@@ -209,13 +212,13 @@ static const char itcPower2ShiftTab[] =
 
 #define ITC_MEMCPY_AUTO( dst, src, len )                                            \
 {                                                                                   \
-	size_t _icv_memcpy_i_, _icv_memcpy_len_ = (len);                                \
+	itc_size_t _icv_memcpy_i_, _icv_memcpy_len_ = (len);                                \
 	char* _icv_memcpy_dst_ = (char*)(dst);                                          \
 	const char* _icv_memcpy_src_ = (const char*)(src);                              \
 	if ((_icv_memcpy_len_ & (sizeof(int)-1)) == 0)									\
 	{                                                                               \
-		assert(((size_t)_icv_memcpy_src_&(sizeof(int)-1)) == 0 &&					\
-		((size_t)_icv_memcpy_dst_&(sizeof(int)-1)) == 0);							\
+	assert(((itc_size_t)_icv_memcpy_src_&(sizeof(int)-1)) == 0 && \
+	((itc_size_t)_icv_memcpy_dst_&(sizeof(int)-1)) == 0);							\
 		for (_icv_memcpy_i_ = 0; _icv_memcpy_i_ < _icv_memcpy_len_;                 \
 			_icv_memcpy_i_ += sizeof(int))                                          \
 		{                                                                           \
@@ -314,7 +317,7 @@ typedef struct Track_Size_t
 
 typedef struct _colour
 {
-	uchar val[3];
+	itc_uchar val[3];
 }Track_Colour_t;
 //_inline Track_Size_t itcSize(int width, int height);
 

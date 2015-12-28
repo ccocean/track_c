@@ -33,6 +33,9 @@
     <ClCompile Include="stuTrack_track_img.c">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="Tch_Queue.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="itcCore.h">
@@ -57,6 +60,9 @@
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="stuTrack_track_img.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="Tch_Queue.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>

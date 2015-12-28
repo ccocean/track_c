@@ -27,7 +27,7 @@ int main()
 	char* g_videoPath;
 	char* src=0;
 	//int g_count = 0;
-	g_videoPath = "video/teacher2.mp4";
+	g_videoPath = "video/teacher.mp4";
 	/*g_frameSize = itcSize(640, 360);
 	g_tchWin = itcRect(0, 100, 640, 200);
 	g_blkWin = itcRect(0, 35, 640, 50);*/
@@ -45,11 +45,14 @@ int main()
 	argument->numOfPos = 10;
 	argument->numOfSlide = 5;
 	argument->isSetParams = 0;
+	
 	Tch_Result_t *res;
 	res = (Tch_Result_t*)malloc(sizeof(Tch_Result_t));
 	Tch_Data_t *data;
 	//data->callbackmsg_func = printf;
 	data = (Tch_Data_t*)malloc(sizeof(Tch_Data_t));
+	data->sysData.width = WIDTH;
+	data->sysData.height = HEIGHT;
 	int err = tch_Init(argument, data);
 	if (err<0)
 	{
@@ -87,17 +90,23 @@ int main()
 		imgSrc->origin = frame->origin;
 		cvCvtColor(imgSrc, grayImg, CV_RGB2GRAY);
 		cvCvtColor(imgSrc, yuvImg, CV_RGB2YUV_I420);
+		uv = (uchar*)(yuvImg->imageData + (480 * 264));
 		//memcpy(srcMat->data.ptr, grayImg->imageData, srcMat->step*srcMat->rows);
 		//cvShowImage("test", imgSrc);
 		testMat = MatToCV(data->mhiMatTch);
 		cvShowImage("teacher", &testMat);
 		start = clock();
+		//tch_Init(argument, data);
 		result = tch_track(yuvImg->imageData,uv,argument,data,res);
+		if (result==1)
+		{
+			printf("当前状态为：%d,当前计数为： %d\r\n", res->status,data->g_count);
+		}
 		end = clock();
 		cvCvtColor(yuvImg, imgSrc, CV_YUV2BGR_I420);
 		cvShowImage("test", imgSrc);
 		delta = (end - start) ;
-		printf("status:%d, position:%d, time:%f\r\n", res->status,res->pos,(double)(delta/CLOCKS_PER_SEC));
+		//printf("status:%d, position:%d, time:%f\r\n", res->status,res->pos,(double)(delta/CLOCKS_PER_SEC));
 		cvWaitKey(1);
 		//g_count++;
 	}
