@@ -11,6 +11,11 @@ static void _track_draw_point1(itc_uchar *buffer_y, itc_uchar *buffer_u, itc_uch
 	{
 		return;
 	}
+	if (point_x >= img_size->width || point_y >= img_size->height
+		|| point_x < 0 || point_y < 0)
+	{
+		return;
+	}
 	//yuv�ֶδ洢
 	int point_x_off = ((point_x & 1) == 0) ? 1 : -1;
 	int point_y_off = ((point_y & 1) == 0) ? img_size->width : -img_size->width;
@@ -34,6 +39,11 @@ static void _track_draw_point2(itc_uchar *buffer_y, itc_uchar *buffer_u, itc_uch
 {
 	//TRACK_DRAW_YUV420SP
 	if (buffer_y == NULL || img_size == NULL || yuv_value == NULL)
+	{
+		return;
+	}
+	if (point_x >= img_size->width || point_y >= img_size->height 
+		|| point_x<0 || point_y<0)
 	{
 		return;
 	}

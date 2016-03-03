@@ -32,9 +32,9 @@ int main()
 	g_tchWin = itcRect(0, 100, 640, 200);
 	g_blkWin = itcRect(0, 35, 640, 50);*/
 	Tch_Size_t _frame = { WIDTH, HEIGHT };
-	Tch_Rect_t tch = { 0, 0, WIDTH, 150 };//{0,75,480,150}
+	Tch_Rect_t tch = { 0, 75, WIDTH, 150 };//{0,75,480,150}
 	Tch_Rect_t blk = { 0, 26, WIDTH, 37 }; //{0, 35, 640, 50}
-	Tch_Threshold_t threshold = { 2, 7200, 95 };//{2, 12000, 130}
+	Tch_Threshold_t threshold = { 2000, 7200, 95 };//{2, 12000, 130}
 	TeaITRACK_Params *argument;
 	argument = (TeaITRACK_Params *)malloc(sizeof(TeaITRACK_Params));
 	argument->frame = _frame;
@@ -42,9 +42,9 @@ int main()
 	argument->blk = blk;
 	argument->threshold = threshold;
 	//argument->isSetParams = 1;
-	argument->numOfPos = 10;
+	argument->numOfPos = 13;
 	argument->numOfSlide = 5;
-	argument->isSetParams = 0;
+	argument->isSetParams = 1;
 	
 	Tch_Result_t *res;
 	res = (Tch_Result_t*)malloc(sizeof(Tch_Result_t));
@@ -98,10 +98,10 @@ int main()
 		start = clock();
 		//tch_Init(argument, data);
 		result = tch_track(yuvImg->imageData,uv,argument,data,res);
-		if (result==1)
-		{
+		/*if (result==1)
+		{*/
 			printf("当前状态为：%d,当前计数为： %d\r\n", res->status,data->g_count);
-		}
+		//}
 		end = clock();
 		cvCvtColor(yuvImg, imgSrc, CV_YUV2BGR_I420);
 		cvShowImage("test", imgSrc);

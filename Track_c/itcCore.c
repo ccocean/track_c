@@ -457,6 +457,7 @@ int track_find_contours(Itc_Mat_t* src, Track_Contour_t** pContour, Track_MemSto
 		return 0;
 	}
 	int step = src->step;
+
 	//char *img0 = (char*)(src->data.ptr);
 	char *img = (char*)(src->data.ptr + step);
 	
@@ -469,6 +470,7 @@ int track_find_contours(Itc_Mat_t* src, Track_Contour_t** pContour, Track_MemSto
 	int prev = img[x - 1];
 
 	int count = 0;
+	Track_Seq_t* contour = NULL;
 	for (; y < height; y++, img += step)		//行，从上至下
 	{
 		for (x = 1; x < width; x++)				//列，从左至右
@@ -486,7 +488,7 @@ int track_find_contours(Itc_Mat_t* src, Track_Contour_t** pContour, Track_MemSto
 					is_hole = 1;				//设置孔标志
 				}
 				
-				Track_Seq_t* contour = itcCreateSeq(0, sizeof(Track_Contour_t), sizeof(Track_Point_t), storage);
+				contour = itcCreateSeq(0, sizeof(Track_Contour_t), sizeof(Track_Point_t), storage);
 				contour->flags = is_hole;
 				//跟踪边缘的起点
 				origin.y = y;
@@ -620,9 +622,9 @@ int track_filtrate_contours(Track_Contour_t** pContour, int size_Threshold, Trac
 	{
 		for (j = 0; j < count_rect; j++)
 		{
-			if (i!=j)
+			if (i != j)
 			{
-				if (track_intersect_rect(rect_arr + i, rect_arr + j, 1))		//判断是否相交，如果相交则直接合并
+				if (track_intersect_rect(rect_arr + i, rect_arr + j, 0))		//判断是否相交，如果相交则直接合并
 				{
 					count_rect--;
 					*(rect_arr + j) = *(rect_arr + count_rect);
@@ -643,7 +645,7 @@ int track_filtrate_contours(Track_Contour_t** pContour, int size_Threshold, Trac
 // 返 回 值: 
 // 参    数: 
 //************************************
-int track_calculateDirect_ROI(Itc_Mat_t* mhi, Track_Rect_t roi, int *direct)
+int track_calculateDirect_ROI(Itc_Mat_t* mhi, Track_Rect_t roi, int *direct, float *dX, float *dY)
 {
 	//int sum_gradientV = 0;		//垂直方向梯度
 	//int sum_gradientH = 0;		//水平方向
@@ -955,19 +957,28 @@ int track_calculateDirect_ROI(Itc_Mat_t* mhi, Track_Rect_t roi, int *direct)
 	int angle = (int)(atan2(gradientV, gradientH) * ITC_RADIAN_TO_ANGLE);
 	angle = angle < 0 ? angle + ITC_360DEGREE : angle;
 	*direct = angle;
+	*dX = gradientH / ((float)(1 << (ITC_FIXEDPOINT_ALIGN-1)));
+	*dY = gradientV / ((float)(1 << (ITC_FIXEDPOINT_ALIGN-1)));
 	if (count_change>threshold)
 	{
-		int gradientV_abs = abs(gradientV);
-		int gradientH_abs = abs(gradientH);
-		if (gradientV_abs>gradientH_abs)
-		{
-			if (gradientV_abs > (1 << (ITC_FIXEDPOINT_ALIGN - 1)))
-				return 1;
-		}
-		else if (gradientH_abs > (1 << (ITC_FIXEDPOINT_ALIGN - 1)))
-		{
-			return 2;
-		}
+		//int gradientV_abs = abs(gradientV);
+		//int gradientH_abs = abs(gradientH);
+		//if (gradientV_abs>gradientH_abs)
+		//{
+		//	if (gradientV_abs > (1 << (ITC_FIXEDPOINT_ALIGN - 1)))
+		//		return 1;
+		//	else
+		//		return -1;
+		//}
+		//else if (gradientH_abs > (1 << (ITC_FIXEDPOINT_ALIGN - 1)))
+		//{
+		//	return 2;
+		//}
+		//else
+		//{
+		//	return -2;
+		//}
+		return 1;
 	}
 	return 0;
 }
@@ -1004,7 +1015,7 @@ void track_update_midValueBK(Itc_Mat_t* mat, Itc_Mat_t* matBK)
 			int diff = abs(matValue - qmat[j]);
 			if (diff<250)
 			{
-				if (qmat[j]>qmBK[j])
+				if (qmat[j] > qmBK[j])
 				{
 					qmBK[j] = ITC_CAST_8U(++matValue);
 				}
@@ -1056,7 +1067,7 @@ int track_copyImage_ROI(Itc_Mat_t* src, Itc_Mat_t* dst, Track_Rect_t roi)
 	}
 }
 
-BOOL track_resize_matData(itc_uchar* srcData, Track_Size_t *ssize, char* dstData, Track_Size_t *dsize)
+itc_BOOL track_resize_matData(itc_uchar* srcData, Track_Size_t *ssize, char* dstData, Track_Size_t *dsize)
 {
 	if (srcData == NULL || ssize==NULL
 		|| dstData == NULL || dsize == NULL)
@@ -1103,4 +1114,24 @@ BOOL track_resize_matData(itc_uchar* srcData, Track_Size_t *ssize, char* dstData
 	itcFree_(x_ofs);
 	x_ofs = NULL;
 	return TRUE;
+}
+
+void perspectiveConvert(Track_Point_t *inpt, Track_Point_t *outpt, Itc_Mat_t* M)
+{
+	if (M->cols != 3 && M->rows != 3)
+	{
+		return;
+	}
+	double *prtH = M->data.db;
+	double w = inpt->x*prtH[6] + inpt->y*prtH[7] + prtH[8];
+	if (w > -ITC_DBL_EPSILON && w < ITC_DBL_EPSILON)
+	{	
+		w = 0.0;
+	}
+	else
+	{	
+		w = 1.0 / w;
+	}
+	outpt->x = (int)((inpt->x*prtH[0] + inpt->y*prtH[1] + prtH[2])*w + 0.5);
+	outpt->y = (int)((inpt->x*prtH[3] + inpt->y*prtH[4] + prtH[5])*w + 0.5);
 }

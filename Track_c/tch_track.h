@@ -91,7 +91,6 @@ typedef struct Data
 
 	int g_posIndex;
 	int g_prevPosIndex;
-	int g_flag;
 	/*int g_rectCnt;*/
 	int tch_lastStatus;
 
@@ -99,8 +98,10 @@ typedef struct Data
 	int track_pos_width;
 	int numOfPos;
 	int numOfSlide;
+	int lastRectNum;
 
 	Track_Point_t center;
+	//Track_Point_t center1, center2;
 	Track_Point_t lastCenter;
 
 	Track_Size_t g_frameSize; //压缩后的大小
@@ -127,6 +128,7 @@ typedef struct Data
 	//计时器定义
 	Tch_Timer_t slideTimer;
 	Tch_Timer_t tch_timer;
+	Tch_Timer_t outsideTimer;
 
 	//预置位滑块定义
 	Tch_CamPosSlide_t pos_slide;
@@ -137,7 +139,7 @@ typedef struct Data
 
 	Tch_SysData_t sysData;
 
-	Tch_Queue_t *tch_queue;
+	//Tch_Queue_t *tch_queue;
 	
 	//用于绘制的颜色
 	Track_Colour_t pink_colour;

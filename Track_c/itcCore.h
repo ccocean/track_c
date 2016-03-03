@@ -65,7 +65,7 @@ Itc_Mat_t	itc_mat(int rows, int cols, int type, void* data);											//ÊÖ¶¯·ÖÅ
 Itc_Mat_t*	itc_create_mat( int height, int width, int type );											//´´½¨Mat
 Itc_Mat_t*	itc_create_matHeader( int rows, int cols, int type );										//´´½¨MatÍ·
 Itc_Mat_t*	itc_init_matHeader( Itc_Mat_t* arr, int rows, int cols, int type, void* data, int step );	//ÓĞMatÍ·ºó³õÊ¼»¯
-void	itc_release_mat( Itc_Mat_t** mat );															//ÊÍ·ÅMat,°üÀ¨Í·ºÍÊı¾İ
+void	itc_release_mat( Itc_Mat_t** mat );																//ÊÍ·ÅMat,°üÀ¨Í·ºÍÊı¾İ
 
 
 void track_sub_mat(Itc_Mat_t* src1, Itc_Mat_t* src2, Itc_Mat_t* dst);			//dst=src1-src2
@@ -88,13 +88,15 @@ int track_filtrate_contours(Track_Contour_t** pContour,int size_Threshold, Track
 
 int track_intersect_rect(Track_Rect_t *rectA, Track_Rect_t *rectB, int expand_dis);	//ÅĞ¶ÏÁ½¸ö¾ØĞÎ¿òÊÇ·ñÏà½»
 
-int track_calculateDirect_ROI(Itc_Mat_t* mhi, Track_Rect_t roi, int *direct);	//·µ»ØroiÇøÓòÄÚµÄÄ¿±êÕûÌåÔË¶¯·½Ïò£¬
+int track_calculateDirect_ROI(Itc_Mat_t* mhi, Track_Rect_t roi, int *direct, float *dX, float *dY);	//·µ»ØroiÇøÓòÄÚµÄÄ¿±êÕûÌåÔË¶¯·½Ïò
 
 void track_update_midValueBK(Itc_Mat_t* mat, Itc_Mat_t* matBK);					//ÓÃÖĞÖµ·¨¸üĞÂ±³¾°
 
 int track_copyImage_ROI(Itc_Mat_t* src, Itc_Mat_t* dst, Track_Rect_t roi);
 
 itc_BOOL  track_resize_matData(itc_uchar* srcData, Track_Size_t* ssize, char* dstData, Track_Size_t* dsize);
+
+void perspectiveConvert(Track_Point_t* inpt, Track_Point_t *outpt, Itc_Mat_t* M);
 #ifdef  __cplusplus  
 }
 #endif  /* end of __cplusplus */ 

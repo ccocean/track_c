@@ -73,7 +73,8 @@ static int stuTrack_matchingSatnd_ROI(StuITRACK_InteriorParams* interior_params_
 	int x = roi.x + (roi.width >> 1);
 	int y = roi.y + (roi.height >> 1);
 	int i = 0;
-	int flag_ROI = track_calculateDirect_ROI((Itc_Mat_t *)interior_params_p->mhiMat, roi, &direct);
+	float dx = 0, dy = 0;
+	int flag_ROI = track_calculateDirect_ROI((Itc_Mat_t *)interior_params_p->mhiMat, roi, &direct,&dx,&dy);
 
 	if (flag_ROI == 1 && roi.height>roi.width)
 	{
@@ -227,6 +228,7 @@ static void stuTrack_analyze_ROI(StuITRACK_InteriorParams* interior_params_p)
 
 	int direct = 0;
 	int standard_direct = 0;
+	float dx = 0, dy = 0;
 	int flag_ROI = 0;
 	int i = 0;
 	for (i = 0; i < interior_params_p->count_trackObj_stand; i++)
@@ -237,7 +239,7 @@ static void stuTrack_analyze_ROI(StuITRACK_InteriorParams* interior_params_p)
 			if (stuTrack_stand[i].flag_matching == FALSE)
 			{
 				standard_direct = stuTrack_direct_threshold[interior_params_p->stuTrack_stand[i].centre.x];
-				flag_ROI = track_calculateDirect_ROI(mhi, stuTrack_stand[i].roi, &direct);
+				flag_ROI = track_calculateDirect_ROI(mhi, stuTrack_stand[i].roi, &direct,&dx,&dy);
 				//_PRINTF("a角度：原角度:%d,当前角度:%d，范围:%d\n", stuTrack_stand[i].direction, direct, stuTrack_direct_range);
 				if ((flag_ROI == 1) && ((abs(stuTrack_stand[i].direction - direct)) <= stuTrack_direct_range))
 				{
@@ -258,7 +260,7 @@ static void stuTrack_analyze_ROI(StuITRACK_InteriorParams* interior_params_p)
 			//检测有没有坐下
 			standard_direct = stuTrack_direct_threshold[stuTrack_stand[i].centre.x];
 			standard_direct = (standard_direct > ITC_180DEGREE) ? (standard_direct - ITC_180DEGREE) : (standard_direct + ITC_180DEGREE);		//计算与起立方向相反的角度
-			flag_ROI = track_calculateDirect_ROI(mhi, stuTrack_stand[i].roi, &direct);
+			flag_ROI = track_calculateDirect_ROI(mhi, stuTrack_stand[i].roi, &direct,&dx,&dy);
 			if ((flag_ROI == 1) && ((abs(standard_direct - direct))<= stuTrack_direct_range + EXPADN_STURECK_SITDOWN_DIRECT))
 			{
 				stuTrack_stand[i].count_down++;
